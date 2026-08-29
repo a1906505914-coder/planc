@@ -268,14 +268,17 @@ def inject_program_sheets(wb, meta=None):
 
 
 def _move_prog_to_end(wb):
-    """把『审计程序执行说明』『勾稽与异常检查』移到 wb._sheets 末尾（保持此顺序）。"""
+    """把『审计程序执行说明』『勾稽与异常检查』移到 wb._sheets 末尾（保持此顺序），
+    且『对方科目核对』类注入表移到程序表之前（兜底部分模块在 audit_program 之后
+    注入对方科目核对 → 追加到更末尾 → audit_checker 报顺序 WARN）。"""
     try:
         _s = wb._sheets
         _prog = [s for s in _s if s.title == '审计程序执行说明']
         _rc = [s for s in _s if s.title == '勾稽与异常检查']
         if _prog or _rc:
-            _others = [s for s in _s if s not in (_prog + _rc)]
-            wb._sheets[:] = _others + _prog + _rc
+            _cp = [s for s in _s if ('对方科目核对' in s.title or '剩余对方科目核对' in s.title)]
+            _others = [s for s in _s if s not in (_prog + _rc + _cp)]
+            wb._sheets[:] = _others + _cp + _prog + _rc
     except Exception:
         pass
 

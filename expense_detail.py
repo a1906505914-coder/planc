@@ -331,13 +331,15 @@ def read_all_tb(data_dir, entities, years):
                         # ⚡ 2026-08-10 修复：二级借发控制数（明细表 TB 列依赖）——
                         # 原 SAP 分支只建 tb_l2_names、漏 tb_l2_control → 明细表(change_compare)
                         # TB 列全空 → 财务费用明细表空壳（1010 有审定 8536 万但明细表 0 行）。
-                        # ⚡⚡ 2026-08-28 财务费用(6603)控制数改由 read_all_gl 填 GL 净额
-                        #   （明细表与分月/附注统一净额口径，审定为 TB 权威独立）；此处跳过。
-                        if c4 == str(_FIN_CODE):
-                            continue
+                        # ⚡⚡ 2026-08-29 用户铁律：TB=审定表=明细表=附注，禁止"口径不一致"。
+                        #   财务费用(6603)明细表控制数改回【TB 净额】(debit−credit)，与审定表
+                        #   (TB jf−df) 同源一致；read_all_gl 不再覆盖（原 2026-08-28 用 GL 净额
+                        #   导致 1010 审定 7688万 vs 明细 8261万 差异）。
+                        #   注意：这里只遍历 len(code)>=6（末级），不含一级父行，天然无双计。
                         for y in years:
                             _k2 = (e, _ci, c6, str(y))
-                            tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + float(v.get('debit') or 0.0)
+                            tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + (
+                                float(v.get('debit') or 0.0) - float(v.get('credit') or 0.0))
                         if len(code) >= 8:
                             tb_l3_names[_ci].setdefault(code, nm)
         return name2code, code2name, tb_l2_names, tb_l2_control, tb_l1_control, tb_l3_names
@@ -556,14 +558,13 @@ def read_all_gl(data_dir, entities, years, name2code, tb_l2_names=None, tb_l2_co
                     _cr = float(r.get('credit') or 0.0)
                     arr[mo - 1] += _db - _cr
                     arr[12 + mo - 1] += _cr
-                # ⚡ 2026-08-10 补填二级名+控制数（6600 系列 GL FR 拆分；⚡⚡ 2026-08-28 财务费用 6603
-                # 也补填 GL 净额——明细表原用 read_all_tb 的 TB 借发(8536万)，与分月/附注 GL 净额(8261万)
-                # 不一致（2+2 分列），统一 GL 净额后四表口径一致；审定表仍走 TB 权威并披露差异）
+                # ⚡ 2026-08-10 补填二级名（6600 系列 GL FR 拆分）。
+                # ⚡⚡ 2026-08-29 用户铁律：TB=审定表=明细表=附注一致。原 2026-08-28 在此用
+                #   GL 净额覆盖 tb_l2_control，导致明细表(TB列)与审定表(TB权威)不一致
+                #   （1010 审定 7688万 vs 明细 8261万）。控制数改由 read_all_tb 填 TB 净额，
+                #   此处【不再覆盖】tb_l2_control（GL 数据仍用于分月/附注的月度拆分）。
                 if (code.startswith(_POOL_CODE) or code.startswith(_FIN_CODE)) and tb_l2_names is not None and c6 and nm6:
                     tb_l2_names[c].setdefault(c6, nm6)
-                if (code.startswith(_POOL_CODE) or code.startswith(_FIN_CODE)) and tb_l2_control is not None and c6:
-                    _k2 = (e, c, c6, y)
-                    tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + _db - _cr
         return gl
     gl = {y: defaultdict(lambda: [0.0] * 24) for y in years}  # 前12=借, 后12=贷
     for e, yd in entities.items():

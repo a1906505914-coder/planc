@@ -70,9 +70,14 @@ def self_check(data_dir, group_dir=None, quiet=False):
             subj = _re.sub(r'_\d{4}集团$', '', subj)   # 先按集团名去
             subj = _re.sub(r'_\d{4}$', '', subj)       # 再去年份（必须先于去下划线）
             subj = subj.replace('_', '')
+            # ⚡⚡ 2026-08-29 P0 修复：按底稿文件名主体后缀（_1010）限定 TB 判定——
+            #   原不传 comp 用全集团判定，使用权资产 2468/1357 有数据 → 1010 主体无该科目的
+            #   空白底稿被误报为"TB 有数据取数 bug"。实为正常空壳。
+            _m = _re.search(r'_(\d{4})\.xlsx$', os.path.basename(b))
+            _comp = _m.group(1) if _m else None
             try:
                 from sheet_gap_check import tb_has_subject_data
-                has = tb_has_subject_data(data_dir, subj)
+                has = tb_has_subject_data(data_dir, subj, comp=_comp)
             except Exception:
                 has = True
             (tb_true if has else tb_false).append((b, has))

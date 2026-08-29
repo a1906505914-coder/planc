@@ -351,11 +351,16 @@ def check_file(fp):
                     issues.append(('WARN', '缺『审计程序执行说明』sheet（审计程序记录，audit_program 注入；重跑后补齐）'))
                 if '勾稽与异常检查' not in wb.sheetnames:
                     issues.append(('WARN', '缺『勾稽与异常检查』sheet（表内勾稽+L4 异常规则，audit_program 注入）'))
-                # 顺序规范：两张程序表应排在工作簿末尾（收尾表）
+                # 顺序规范：两张程序表应排在工作簿末尾（收尾表）。
+                # ⚡⚡ 2026-08-29 放宽：程序表之后只允许『审计调整分录』类收尾表
+                #   （bank 等模块在 audit_program 注入后追加调整分录到更末尾，属合理设计，
+                #   原要求"程序表必须是倒数 1/2 位"会误报）。
                 if '勾稽与异常检查' in wb.sheetnames and '审计程序执行说明' in wb.sheetnames:
                     _ix_prog = wb.sheetnames.index('审计程序执行说明')
                     _ix_rc = wb.sheetnames.index('勾稽与异常检查')
-                    if not (_ix_prog == len(wb.sheetnames) - 2 and _ix_rc == len(wb.sheetnames) - 1):
+                    _suffix = wb.sheetnames[max(_ix_prog, _ix_rc) + 1:]
+                    _tail_ok = {'审计调整分录', '调整分录'}
+                    if _ix_prog > _ix_rc or any(s not in _tail_ok for s in _suffix):
                         issues.append(('WARN', '『审计程序执行说明/勾稽与异常检查』未置于末尾（顺序规范）'))
     except Exception:
         pass

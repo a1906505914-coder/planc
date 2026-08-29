@@ -354,7 +354,7 @@ def discover_entities(data_dir):
             # ⚡⚡ 2026-08-29 P0 修复：U8 多主体账套（XBJ 等）SAP 布局探测返回 None →
             #   SR 空 → discover 恒 0 主体 → run_u8_on_sap 对 XBJ 全量跑不了（OK 0）。
             #   回退 audit_common 的 U8 通用发现（能识别 XBJ 201 个长项目名主体），
-            #   结构转适配层 {code: {year: {km, gl(list), aux}}}。
+            #   结构转适配层 {code: {year: {km, gl, aux}}}。
             out = {}
             try:
                 from audit_common import discover_entities as _de_u8
@@ -367,7 +367,10 @@ def discover_entities(data_dir):
                         _gl = _bun.get('gl')
                         out.setdefault(str(_c), {})[str(_yy)] = {
                             'km': _km,
-                            'gl': [_gl] if isinstance(_gl, str) else _gl,
+                            # ⚡⚡ 2026-08-29 二次修复：U8 生成器（pl/expense 等）对 gl 做
+                            #   os.path.exists(g) 需单路径字符串；原转 list 导致 TypeError。
+                            #   SAP 分支才用 list（read_gl_rows 内部展开）。
+                            'gl': _gl,
                             'aux_ar': _bun.get('aux_ar'),
                             'aux_ap': _bun.get('aux_ap'),
                         }

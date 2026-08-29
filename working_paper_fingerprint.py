@@ -98,10 +98,32 @@ def base():
     print(f'  文件数：{nf}，耗时 {time.time() - t0:.0f}s', flush=True)
 
 
+def _load_allow(rules_path):
+    """加载预期差异白名单（每行一个正则，匹配 report 行则忽略）。返回 compiled list。"""
+    if not rules_path or not os.path.exists(rules_path):
+        return []
+    out = []
+    with open(rules_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            try:
+                out.append(re.compile(line))
+            except re.error:
+                print(f'  ⚠️ 白名单正则无效，跳过：{line}')
+    return out
+
+
 def check():
     if not os.path.exists(BASE_PATH):
         print(f'无基线文件：{BASE_PATH}（先运行 base）')
         return 1
+    allow_path = None
+    if '--allow' in sys.argv:
+        i = sys.argv.index('--allow')
+        allow_path = sys.argv[i + 1]
+    allow = _load_allow(allow_path)
     meta = None
     t0 = time.time()
     diffs = 0
@@ -161,6 +183,18 @@ def check():
     for (g, fn) in sorted(cur_fns - base_fns):
         report.append(f'[新增文件] {g}/{fn}')
         diffs += 1
+    # ⚡ 2026-08-29 预期差异白名单：匹配 report 行的差异视为预期，不计入回退
+    if allow:
+        kept = []
+        for line in report:
+            if any(rx.search(line) for rx in allow):
+                continue
+            kept.append(line)
+        allowed_cnt = len(report) - len(kept)
+        if allowed_cnt:
+            print(f'  ⚡ 白名单忽略 {allowed_cnt} 处预期差异')
+            diffs -= allowed_cnt
+        report = kept
     lines = [f'底稿指纹对比 @ {time.strftime("%Y-%m-%d %H:%M:%S")}',
              f'基线 {meta.get("created", "?") if meta else "?"}；扫描耗时 {time.time()-t0:.0f}s']
     if diffs == 0:

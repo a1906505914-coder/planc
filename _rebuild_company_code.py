@@ -38,7 +38,8 @@ def extract_from_tb():
     for fp in sorted(glob.glob(os.path.join(tb_dir, '*.xlsx'))):
         try:
             wb = openpyxl.load_workbook(fp, read_only=True, data_only=True)
-        except Exception:
+        except Exception as _ex:
+            print(f'  ⚠️ 读取失败跳过：{os.path.basename(fp)}：{_ex}')
             continue
         for sh in wb.worksheets:
             it = sh.iter_rows(values_only=True)
@@ -74,8 +75,8 @@ def extract_candidates():
                         nm = m.group(1)
                         if len(nm) >= 4 and '公司' in nm:
                             cand.setdefault(code, Counter())[nm] += 1
-            except Exception:
-                pass
+            except Exception as _ex:
+                print(f'  ⚠️ 公司名提取失败：{_ex}')
     return cand
 
 

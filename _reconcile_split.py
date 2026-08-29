@@ -29,8 +29,8 @@ def _inject_sheets(target_fp, src_fp, prefix=''):
     if not os.path.exists(bak):
         try:
             shutil.copy2(target_fp, bak)
-        except Exception:
-            pass
+        except Exception as _ex:
+            print(f'  ⚠️ 备份失败 {target_fp}：{_ex}')
     try:
         src_wb = openpyxl.load_workbook(src_fp)
         dst_wb = openpyxl.load_workbook(target_fp)

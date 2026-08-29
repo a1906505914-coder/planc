@@ -2572,6 +2572,7 @@ def _write_bad_cp_voucher_sheet(ws, bad_cps, rows, subject, label):
     _style_header(ws, 3, len(hdr))
     rr = 4
     _n = 0
+    _out_rows = []
     for r in rows:
         if not r.get("is_sub"):
             continue
@@ -2591,16 +2592,22 @@ def _write_bad_cp_voucher_sheet(ws, bad_cps, rows, subject, label):
                 continue
             d = r.get("date")
             ds = str(d)[:10] if d is not None else ""
-            # ⚡⚡ 2026-08-25 性能优化：ws.append 批量写行（异常凭证清单可达 7.8 万行，
-            #   逐 cell 70 万次 → append 快 5 倍），样式后置循环定位。
-            ws.append([r.get("entity") or subject, side, nm, verdict,
-                       r.get("vno"), ds, r.get("cust") or "",
-                       str(r.get("summary") or "")[:60], round(amt, 2)])
-            # ⚡⚡ 2026-08-25 性能优化：78K 行数据区去逐 cell 样式（border/fill/alignment
-            #   循环 = 70 万次 ≈ 89s）。审计判断靠『结论』列文字（异常/关注）+ 表头样式，
-            #   数据行纯值写入（Excel 大数据表通用做法）。明细行如需定位看结论列即可。
-            rr += 1
-            _n += 1
+            # ⚡⚡ 2026-08-29 用户需求：按『对方科目核对』sheet 顺序排列
+            #   （核算主体→年度→借/贷侧→对应科目名），便于精确对应查找异常分录。
+            _ent = str(r.get("entity") or subject)
+            _yr = str(d)[:4] if d is not None else ""
+            _side_order = 0 if dr > 0.005 else 1  # 对方科目核对 sides：借方侧在前
+            _out_rows.append((_ent, _yr, _side_order, nm, [
+                _ent, side, nm, verdict,
+                r.get("vno"), ds, r.get("cust") or "",
+                str(r.get("summary") or "")[:60], round(amt, 2)]))
+    _out_rows.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+    for _item in _out_rows:
+        # ⚡⚡ 2026-08-25 性能优化：ws.append 批量写行（异常凭证清单可达 7.8 万行，
+        #   逐 cell 70 万次 → append 快 5 倍），样式后置循环定位。
+        ws.append(_item[4])
+        rr += 1
+        _n += 1
     if _n == 0:
         ws.cell(4, 1, "（该科目无『异常/关注』对应科目凭证，或数据为凭证小计无法反查——对方科目核对无异常项时本表自然为空）")
     widths = [16, 6, 34, 8, 14, 12, 16, 60, 16]
@@ -4116,13 +4123,14 @@ def export_combined_excel(output, periods, comb_customers, comb_summary, issues,
         ws = wb.create_sheet("主营客户比")
         _write_revenue_customer_sheet(ws, data_dir, comb_customers, comb_summary, _render_periods, entities_dict, label)
     # ⚡ 2026-08-11 阶段一 1.2 合并底稿差异化：内部交易抵消核对表（集团模式多主体专属）
-    if len(ent_list) > 1:
-        ws = wb.create_sheet("内部交易抵消核对")
-        try:
-            _write_intra_group_recon_sheet(ws, ent_list, comb_customers, comb_summary,
-                                           _render_periods, label)
-        except Exception as _ex:
-            print(f'  ⚠️ 内部交易抵消核对失败：{_ex}')
+    # ⚡⚡ 2026-08-29 用户需求：不再生成——关联交易/关联往来底稿由独立小程序生成（88 家核对底稿）。
+    # if len(ent_list) > 1:
+    #     ws = wb.create_sheet("内部交易抵消核对")
+    #     try:
+    #         _write_intra_group_recon_sheet(ws, ent_list, comb_customers, comb_summary,
+    #                                        _render_periods, label)
+    #     except Exception as _ex:
+    #         print(f'  ⚠️ 内部交易抵消核对失败：{_ex}')
     if "Sheet" in wb.sheetnames:
         del wb["Sheet"]
     order = ([f"{label}明细表_{pk}" for pk in periods] +
@@ -7624,19 +7632,15 @@ def build_all_in_dir(data_dir, out_dir=None, period_mode="Y", subject=None, only
             print(f"🗑️ 已移除旧的『往来互抵明细_生成.xlsx』（按需求不再生成）")
         except BaseException:
             pass
-    # ---- 关联交易和余额核对（集团内关联方往来核对）----
-    try:
-        p = build_cross_workbook(all_bal, out_dir, list(entities.keys()), rp_list=rp_list)
-        if p:
-            print(f"✅ 已生成：{p}")
-    except Exception as ex:
-        print(f"⚠️ 关联交易和余额核对生成失败：{ex}")
-    # ---- 关联方往来汇总（2026-08-02 用户需求 A：清单驱动，并入 关联交易和余额核对 工作簿）----
-    if rp_list:
+    # ---- 关联交易和余额核对（2026-08-29 起不再生成：关联交易/关联往来底稿由独立小程序生成，
+    #      88 家核对底稿已另行生成；13 科目底稿小程序不再产出关联交易文件）----
+    _cross_path = os.path.join(out_dir, "关联交易和余额核对_生成.xlsx")
+    if os.path.exists(_cross_path):
         try:
-            _rp_append_summary(data_dir, out_dir, entities, rp_list)
-        except Exception as ex:
-            print(f"⚠️ 关联方往来汇总生成失败：{ex}")
+            os.remove(_cross_path)
+            print("🗑️ 已移除旧的『关联交易和余额核对_生成.xlsx』（不再生成，由独立小程序生成）")
+        except BaseException:
+            pass
     # ---- 外币aux漏标注检查（仅当文件夹存在外币辅助核算余额表时）----
     if has_fx:
         try:

@@ -60,10 +60,7 @@ def build_xw_export(output, periods, comb_customers, comb_summary, issues, comb_
         except Exception as _ex:
             print(f'  ⚠️ Top10 xw 失败：{_ex}')
     if len(ent_list) > 1:
-        try:
-            _render_intra_group_xw(wb, ent_list, comb_customers, comb_summary, _render_periods, label)
-        except Exception as _ex:
-            print(f'  ⚠️ 内部交易抵消核对 xw 失败：{_ex}')
+        pass  # ⚡⚡ 2026-08-29 不再生成内部交易抵消核对（关联交易底稿由独立小程序生成，88 家核对底稿）
     # ---- P2 批次3：坏账准备计算表（AR/ORA）----
     if subj_key in ("AR", "ORA"):
         try:

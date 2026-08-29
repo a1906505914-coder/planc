@@ -10,6 +10,7 @@ SAP 88 家全量 GL 在内存会 OOM → 必须【逐主体】驱动：
     python run_u8_on_sap.py            # 全量 88 家
     python run_u8_on_sap.py 1010 1030  # 指定主体
     python run_u8_on_sap.py --subj equity loan   # 指定科目
+    python run_u8_on_sap.py --no-resume         # 强制全量（默认断点续跑，跳过签名未变的已完成科目）
 """
 import paths as P
 import os
@@ -373,6 +374,114 @@ def _snapshot_out_files():
     return base
 
 
+# ⚡⚡ 2026-08-29 断点续跑（用户诉求：大任务崩溃续跑增强）：
+#   每个 (主体, 科目) 完成后写断点 .resume_{comp}.jsonl，记录状态 + 数据签名 + 代码签名。
+#   --resume（默认开）跳过「已完成 OK/SKIP 且签名未变」的科目；FAIL 不跳过（续跑重试，
+#   连续 3 次 FAIL 标记 FAILED_PERM 跳过并告警）；--no-resume 强制全量。
+#   签名：代码签名=小程序全部 .py 聚合；数据签名=主体 km+gl 文件聚合。任一变化 → 全部失效重跑
+#   （改代码/重导数据后必须全量，这是正确行为）。三集团并行各写各的 .resume_{group} 无冲突。
+_code_sig_cache = None
+
+
+def _code_sig():
+    """小程序目录全部 .py 的 (size, mtime) 聚合哈希（改代码 → 变化 → 断点失效）。"""
+    global _code_sig_cache
+    if _code_sig_cache is not None:
+        return _code_sig_cache
+    import hashlib
+    h = hashlib.sha1()
+    try:
+        for fn in sorted(os.listdir(HERE)):
+            if not fn.endswith('.py'):
+                continue
+            fp = os.path.join(HERE, fn)
+            try:
+                st = os.stat(fp)
+                h.update(f'{fn}|{st.st_size}|{st.st_mtime:.3f}|'.encode('utf-8', 'replace'))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    _code_sig_cache = h.hexdigest()[:16]
+    return _code_sig_cache
+
+
+def _data_sig(ents):
+    """主体数据签名：km + 全部 gl 文件的 (size, mtime) 聚合（重导数据 → 变化 → 断点失效）。"""
+    import hashlib
+    h = hashlib.sha1()
+    seen = set()
+    try:
+        for _e in (ents or {}).values():
+            for _y in (_e or {}).values():
+                _km = _y.get('km') if isinstance(_y, dict) else None
+                if _km:
+                    seen.add(os.path.abspath(_km))
+                for _gl in (_y.get('gl') or []) if isinstance(_y, dict) else []:
+                    if _gl:
+                        seen.add(os.path.abspath(_gl))
+    except Exception:
+        pass
+    for fp in sorted(seen):
+        try:
+            st = os.stat(fp)
+            h.update(f'{os.path.basename(fp)}|{st.st_size}|{st.st_mtime:.3f}|'.encode('utf-8', 'replace'))
+        except Exception:
+            pass
+    return h.hexdigest()[:16]
+
+
+def _resume_file(comp):
+    return os.path.join(DATA, f'.resume_{comp}.jsonl')
+
+
+def _resume_load(comp):
+    """读断点 → {subj: {status, ts, csig, dsig, tries}}。文件损坏则返回空（安全兜底）。"""
+    import json as _json
+    out = {}
+    fp = _resume_file(comp)
+    if not os.path.exists(fp):
+        return out
+    try:
+        with open(fp, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = _json.loads(line)
+                    out[rec['subj']] = rec
+                except Exception:
+                    continue
+    except Exception:
+        return {}
+    return out
+
+
+def _resume_mark(comp, subj, status, csig, dsig):
+    """写入/更新单科目断点（整文件重写保原子性，状态小无性能问题）。"""
+    import json as _json
+    recs = _resume_load(comp)
+    prev = recs.get(subj, {})
+    tries = prev.get('tries', 0)
+    if status == 'FAIL':
+        tries += 1
+        # 连续 3 次 FAIL → 永久跳过（防无限重试死循环），否则保留 FAIL 待续跑重试
+        if tries >= 3:
+            status = 'FAILED_PERM'
+    recs[subj] = {'subj': subj, 'status': status, 'ts': time.strftime('%Y-%m-%d %H:%M:%S'),
+                  'csig': csig, 'dsig': dsig, 'tries': tries}
+    fp = _resume_file(comp)
+    try:
+        tmp = fp + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            for s in sorted(recs):
+                f.write(_json.dumps(recs[s], ensure_ascii=False) + '\n')
+        os.replace(tmp, fp)
+    except Exception:
+        pass
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     global GROUP_MODE, GROUP_ONLY, _cur_work, DATA, OUT
@@ -415,6 +524,10 @@ def main(argv=None):
     group_mode = '--group' in argv
     if group_mode:
         argv.remove('--group')
+    # ⚡ 2026-08-29 断点续跑：--no-resume 强制全量；默认 --resume（跳过签名未变的已完成科目）
+    resume = '--no-resume' not in argv
+    if '--no-resume' in argv:
+        argv.remove('--no-resume')
     comps = [a for a in argv if not a.startswith('-')] or sorted(A.discover_entities(DATA).keys())
     A.set_root(DATA)
     A.patch_audit_common()
@@ -439,9 +552,26 @@ def main(argv=None):
         _cur_work = os.path.join(DATA, f'_work_{comp}')
         os.makedirs(_cur_work, exist_ok=True)
         print(f'=== [{comp}] ===', flush=True)
+        # ⚡ 2026-08-29 断点续跑：算签名 + 加载断点（本轮签名的锚点，用于跳过判断）
+        _csig = _code_sig()
+        _ents = _comp_of(comp) or {}
+        _dsig = _data_sig(_ents)
+        _resume = _resume_load(comp)
+        _n_resume = 0
         for name, fn in DRIVERS.items():
             if subj_only and name not in subj_only:
                 continue
+            # ⚡ 2026-08-29 断点续跑：签名一致且 OK/SKIP/FAILED_PERM 的科目跳过
+            if resume:
+                _rc = _resume.get(name)
+                if _rc and _rc.get('csig') == _csig and _rc.get('dsig') == _dsig:
+                    if _rc.get('status') in ('OK', 'SKIP'):
+                        _n_resume += 1
+                        print(f'  ⏭ [{time.strftime("%H:%M:%S")}] {name}: 跳过（已 {_rc["status"]}，{_rc.get("ts")}）', flush=True)
+                        continue
+                    if _rc.get('status') == 'FAILED_PERM':
+                        print(f'  ⛔ {name}: 跳过（连续失败 {_rc.get("tries")} 次，需人工排查后 --no-resume 重试）', flush=True)
+                        continue
             # ⚡⚡ 2026-08-16 铁律132（看门狗配套）：科目开始打印+时间戳——卡死时能定位到
             #   具体 (主体,科目)，而非仅"完成后"日志（此前卡在科目中间无任何输出）
             print(f'  ⏳ [{time.strftime("%H:%M:%S")}] {name} 开始…', flush=True)
@@ -454,14 +584,19 @@ def main(argv=None):
                 if _n_add or _n_upd:
                     stats['OK'] += 1
                     print(f'  ✅ {name}: {n}（新增 {_n_add} / 更新 {_n_upd} 文件）', flush=True)
+                    _resume_mark(comp, name, 'OK', _csig, _dsig)
                 else:
                     stats['SKIP'] += 1
                     skips.append(f'{comp} {name}')
                     print(f'  ⚪ {name}: SKIP 无产出（TB 无该组数据？）', flush=True)
+                    _resume_mark(comp, name, 'SKIP', _csig, _dsig)
             except Exception:
                 stats['FAIL'] += 1
                 traceback.print_exc()
                 print(f'  ❌ {name} 失败', flush=True)
+                _resume_mark(comp, name, 'FAIL', _csig, _dsig)
+        if _n_resume:
+            print(f'  ↪ [{comp}] 断点续跑跳过 {_n_resume} 个已完成科目（--no-resume 强制全量）', flush=True)
     print(f'完成：OK {stats["OK"]} / SKIP {stats["SKIP"]} / FAIL {stats["FAIL"]}', flush=True)
     if skips:
         print(f'SKIP 明细（{len(skips)} 项，需人工确认是否真无数据）：', flush=True)

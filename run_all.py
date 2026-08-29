@@ -40,6 +40,10 @@ def main():
     if '--subj' in argv:
         i = argv.index('--subj')
         subj = argv[i + 1]
+    # ⚡ 2026-08-29 断点续跑透传：--no-resume 强制全量（默认 resume 跳过签名未变的已完成科目）
+    no_resume = '--no-resume' in argv
+    if no_resume:
+        argv.remove('--no-resume')
     t0 = time.time()
     target = argv[0]
     rc = 0
@@ -48,6 +52,8 @@ def main():
         cmd = [PY, '-X', 'utf8', os.path.join(BASE, 'ah_parallel_run.py')]
         if subj:
             cmd += ['--subj', subj]
+        if no_resume:
+            cmd += ['--no-resume']
         rc = _run(cmd)
         out_root = AH_OUT
     else:
@@ -55,6 +61,8 @@ def main():
         cmd = [PY, '-X', 'utf8', os.path.join(BASE, 'run_u8_on_sap.py'), os.path.abspath(target)]
         if subj:
             cmd += ['--subj', subj]
+        if no_resume:
+            cmd += ['--no-resume']
         rc = _run(cmd)
         out_root = os.path.join(target, '底稿')
     # 指纹回归（对输出目录对比基线）

@@ -38,6 +38,7 @@
 4. **模块级回归**：`run_audit.bat regress_module.py <模块> --allow 白名单` —— 改某模块只重跑该模块 + 指纹对比。
 5. **底稿归档**：`python archive_wp.py [--zip]` 按批次归档正式底稿，回退可取回。
 6. **年度切换**：`audit_config.py` 集中配置 YEAR，`python audit_config.py scan` 扫描剩余硬编码。
+7. **断点续跑（默认开）**：大任务（AH 全量 50 分钟）中途崩溃后，重跑自动跳过「已完成且签名未变」的科目（数据根目录 `.resume_{主体}.jsonl` 记录）。`--no-resume` 强制全量；改代码或重导数据后签名变化 → 自动全量（无需手动清理）。
 
 ## 五、常见问题
 

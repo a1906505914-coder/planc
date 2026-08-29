@@ -8,7 +8,8 @@
 预计：全套 13 模块 × 3 集团 ≈ 原串行耗时的 1/3（约 40-50 分钟）。
 
 用法：
-    python ah_parallel_run.py [--subj current_account,payroll] [--out-dir 集团稿根目录]
+    python ah_parallel_run.py [--subj current_account,payroll] [--out-dir 集团稿根目录] [--no-resume]
+    断点续跑（默认开）：某集团崩溃后重跑会自动跳过已完成科目；--no-resume 强制全量。
 """
 import os
 import sys
@@ -41,6 +42,9 @@ def main():
     if '--subj' in argv:
         i = argv.index('--subj')
         subj_opt = ['--subj', argv[i + 1]]
+    # ⚡ 2026-08-29 断点续跑透传：--no-resume 强制全量（默认 resume，崩溃后重跑自动续跑）
+    if '--no-resume' in argv:
+        subj_opt = ['--no-resume'] + subj_opt
     out_root = OUT_ROOT
     if '--out-dir' in argv:
         i = argv.index('--out-dir')

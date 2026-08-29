@@ -77,14 +77,14 @@ def row(wb, ws, r, values, money_cols=(), center_cols=(), num_fmt='#,##0.00',
             f = {'num_format': num_fmt}
             if fills and j in fills:
                 f['bg_color'] = fills[j]
-            ws.write_number(r, j, v, _fmt(wb, f))
+            ws.write_number(r, j, v, _fmt(wb, **f))
         else:
             f = {}
             if center_cols and j in center_cols:
                 f['align'] = 'center'
             if fills and j in fills:
                 f['bg_color'] = fills[j]
-            ws.write_string(r, j, str(v), _fmt(wb, f))
+            ws.write_string(r, j, str(v), _fmt(wb, **f))
 
 
 def money_fmt(wb):

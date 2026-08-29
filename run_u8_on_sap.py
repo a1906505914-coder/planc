@@ -482,6 +482,75 @@ def _resume_mark(comp, subj, status, csig, dsig):
         pass
 
 
+def _heartbeat_file(comp):
+    return os.path.join(DATA, f'.heartbeat_{comp}')
+
+
+def _touch_heartbeat(comp, name):
+    """每科目开始/完成写心跳文件（看门狗检测停滞超时 → 卡死告警）。"""
+    try:
+        with open(_heartbeat_file(comp), 'w', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} {comp} {name}\n')
+    except Exception:
+        pass
+
+
+def _git_head():
+    """小程序目录当前 git commit（失败返回 None，用于运行报告归档）。"""
+    try:
+        import subprocess as _sp
+        return _sp.check_output(['git', '-C', HERE, 'rev-parse', '--short', 'HEAD'],
+                                stderr=_sp.DEVNULL).decode().strip()[:12]
+    except Exception:
+        return None
+
+
+def _write_run_report(argv, run_log, stats, skips, failed_details):
+    """运行报告落盘（tmp/run_history/run_{ts}.md）：参数归档 + 明细 + 失败 traceback。
+    ⚡ 2026-08-29 用户诉求：每次运行可回溯「哪批代码+哪批数据+结果如何」。"""
+    try:
+        d = os.path.join(HERE, 'run_history')
+        os.makedirs(d, exist_ok=True)
+        ts = time.strftime('%Y%m%d_%H%M%S')
+        fp = os.path.join(d, f'run_{ts}.md')
+        L = []
+        L.append('# 运行报告')
+        L.append(f'- 时间：{time.strftime("%Y-%m-%d %H:%M:%S")}')
+        L.append(f'- 数据根：{DATA}')
+        L.append(f'- 输出：{OUT}')
+        L.append(f'- 参数：{" ".join(argv)}')
+        L.append(f'- git commit：{_git_head() or "（非 git）"}')
+        L.append(f'- 代码签名：{_code_sig()}')
+        L.append(f'- 结果：OK {stats["OK"]} / SKIP {stats["SKIP"]} / FAIL {stats["FAIL"]}'
+                 f'（断点续跑跳过 {sum(1 for x in run_log if x[2] == "RESUME")}）')
+        L.append('')
+        L.append('## 明细')
+        L.append('| 主体 | 科目 | 状态 | 时间 | 耗时s |')
+        L.append('|---|---|---|---|---|')
+        for comp, name, st, ts_, dur in run_log:
+            L.append(f'| {comp} | {name} | {st} | {ts_} | {dur} |')
+        if failed_details:
+            L.append('')
+            L.append('## 失败明细')
+            L.append('')
+            for comp, name, tb_ in failed_details:
+                L.append(f'### {comp} / {name}')
+                L.append('```')
+                L.append(tb_[-1200:])
+                L.append('```')
+        if skips:
+            L.append('')
+            L.append('## SKIP 明细（需人工确认是否真无数据）')
+            L.append('')
+            for s in skips[:100]:
+                L.append(f'- {s}')
+        with open(fp, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(L))
+        print(f'  📋 运行报告已写：{fp}', flush=True)
+    except Exception as _ex:
+        print(f'  ⚠️ 运行报告写入失败：{_ex}', flush=True)
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     global GROUP_MODE, GROUP_ONLY, _cur_work, DATA, OUT
@@ -538,6 +607,8 @@ def main(argv=None):
     #   OK=跑后输出目录有新增文件；SKIP=无产出且无异常（TB 无数据正常跳过）；FAIL=抛异常。
     stats = {'OK': 0, 'SKIP': 0, 'FAIL': 0}
     skips = []
+    run_log = []            # ⚡ 2026-08-29 运行报告：每科目 (comp, name, status, ts, dur)
+    failed_details = []     # 失败科目 traceback 归档
     if group_mode:
         # ⚡ 2026-08-10 集团模式：不 set_comp（current_comp=None → discover 返回全部主体），
         #   以『{根目录名}集团』伪主体单次循环，输出 {科目}审计底稿_{根目录名}集团.xlsx
@@ -567,14 +638,18 @@ def main(argv=None):
                 if _rc and _rc.get('csig') == _csig and _rc.get('dsig') == _dsig:
                     if _rc.get('status') in ('OK', 'SKIP'):
                         _n_resume += 1
+                        run_log.append((comp, name, 'RESUME', time.strftime('%H:%M:%S'), 0))
                         print(f'  ⏭ [{time.strftime("%H:%M:%S")}] {name}: 跳过（已 {_rc["status"]}，{_rc.get("ts")}）', flush=True)
                         continue
                     if _rc.get('status') == 'FAILED_PERM':
+                        run_log.append((comp, name, 'RESUME', time.strftime('%H:%M:%S'), 0))
                         print(f'  ⛔ {name}: 跳过（连续失败 {_rc.get("tries")} 次，需人工排查后 --no-resume 重试）', flush=True)
                         continue
             # ⚡⚡ 2026-08-16 铁律132（看门狗配套）：科目开始打印+时间戳——卡死时能定位到
             #   具体 (主体,科目)，而非仅"完成后"日志（此前卡在科目中间无任何输出）
             print(f'  ⏳ [{time.strftime("%H:%M:%S")}] {name} 开始…', flush=True)
+            _touch_heartbeat(comp, name)
+            _t0 = time.time()
             _before = _snapshot_out_files()
             try:
                 n = fn(comp)
@@ -583,21 +658,28 @@ def main(argv=None):
                 _n_upd = sum(1 for f in _after if f in _before and _after[f] != _before[f])
                 if _n_add or _n_upd:
                     stats['OK'] += 1
-                    print(f'  ✅ {name}: {n}（新增 {_n_add} / 更新 {_n_upd} 文件）', flush=True)
+                    run_log.append((comp, name, 'OK', time.strftime('%H:%M:%S'), round(time.time() - _t0, 1)))
+                    print(f'  ✅ {name}: {n}（新增 {_n_add} / 更新 {_n_upd} 文件，{time.time()-_t0:.0f}s）', flush=True)
                     _resume_mark(comp, name, 'OK', _csig, _dsig)
                 else:
                     stats['SKIP'] += 1
                     skips.append(f'{comp} {name}')
+                    run_log.append((comp, name, 'SKIP', time.strftime('%H:%M:%S'), round(time.time() - _t0, 1)))
                     print(f'  ⚪ {name}: SKIP 无产出（TB 无该组数据？）', flush=True)
                     _resume_mark(comp, name, 'SKIP', _csig, _dsig)
             except Exception:
                 stats['FAIL'] += 1
+                tb = traceback.format_exc()
+                run_log.append((comp, name, 'FAIL', time.strftime('%H:%M:%S'), round(time.time() - _t0, 1)))
+                failed_details.append((comp, name, tb))
                 traceback.print_exc()
                 print(f'  ❌ {name} 失败', flush=True)
                 _resume_mark(comp, name, 'FAIL', _csig, _dsig)
+            _touch_heartbeat(comp, name)
         if _n_resume:
             print(f'  ↪ [{comp}] 断点续跑跳过 {_n_resume} 个已完成科目（--no-resume 强制全量）', flush=True)
     print(f'完成：OK {stats["OK"]} / SKIP {stats["SKIP"]} / FAIL {stats["FAIL"]}', flush=True)
+    _write_run_report(sys.argv[1:], run_log, stats, skips, failed_details)
     if skips:
         print(f'SKIP 明细（{len(skips)} 项，需人工确认是否真无数据）：', flush=True)
         for s in skips[:80]:

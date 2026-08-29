@@ -20,6 +20,7 @@ _wp_fingerprint_base.jsonl
 *.xlsx
 *.log
 tmp/
+run_history/
 _work_*/
 .cache/
 

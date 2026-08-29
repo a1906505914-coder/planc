@@ -44,6 +44,19 @@ def main():
     no_resume = '--no-resume' in argv
     if no_resume:
         argv.remove('--no-resume')
+    # ⚡ 2026-08-29 preflight 接入：跑前自动自检（磁盘空间/Excel占用/并发/数据完整性），
+    #   BLOCK(2)=阻断停止、WARN(1)=警告继续；--skip-preflight 跳过。
+    if '--skip-preflight' in argv:
+        argv.remove('--skip-preflight')
+    else:
+        import preflight_check
+        _pf_target = AH_DATA if target == 'ah' else os.path.abspath(target)
+        _pf_rc = preflight_check.main([_pf_target])
+        if _pf_rc == 2:
+            print('⛔ 运行前自检阻断（磁盘/文件占用/并发等），已停止。处理后重跑，或 --skip-preflight 强行继续。', flush=True)
+            return 2
+        if _pf_rc == 1:
+            print('⚠️ 运行前自检有警告，继续运行（可用 --skip-preflight 跳过自检）…', flush=True)
     t0 = time.time()
     target = argv[0]
     rc = 0

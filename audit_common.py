@@ -1291,16 +1291,16 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
             if for_entity is not None and e != for_entity:
                 continue
             if code is not None and str(c) == str(code):
-                tot += (v['df'] if is_credit else v['jf'])
+                tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
                 continue
             if codes is not None:
                 if any(str(c).startswith(p) for p in codes):
                     if _hit_set and any(str(c) != cc2 and cc2.startswith(str(c)) for cc2 in _hit_set):
                         continue  # 父级行（有后代同族行）→ 只计末级叶子
-                    tot += (v['df'] if is_credit else v['jf'])
+                    tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
                     continue
                 if str(c) in codes:
-                    tot += (v['df'] if is_credit else v['jf'])
+                    tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
                     continue
             # 名称兜底：仅当 编码未命中 且 名称匹配 时计入（避免双计）
             # ⚡⚡ 2026-08-27 P0 修复：原 `str(n) == name_fallback` 精确相等，而 SAP 科目名
@@ -1312,7 +1312,7 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
                     or str(n).startswith(name_fallback + '-')
                     or str(n).startswith(name_fallback + '　')
                     or ('-' not in str(n) and name_fallback in str(n))):
-                tot += (v['df'] if is_credit else v['jf'])
+                tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
         return tot
 
     ws = wb.create_sheet(title=title)

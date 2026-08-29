@@ -343,12 +343,36 @@ def discover_entities(data_dir):
         out = _CACHE_ENT[_d]
     else:
         ents = SR.discover_sap_entities(_d)
-        out = {}
-        for code, yd in ents.items():
-            for yy, paths in yd.items():
-                out.setdefault(code, {})[str(yy)] = {'km': paths.get('km'), 'gl': paths.get('gl'),
-                                                     'aux_ar': paths.get('aux_ar'),
-                                                     'aux_ap': paths.get('aux_ap')}
+        if ents:
+            out = {}
+            for code, yd in ents.items():
+                for yy, paths in yd.items():
+                    out.setdefault(code, {})[str(yy)] = {'km': paths.get('km'), 'gl': paths.get('gl'),
+                                                         'aux_ar': paths.get('aux_ar'),
+                                                         'aux_ap': paths.get('aux_ap')}
+        else:
+            # ⚡⚡ 2026-08-29 P0 修复：U8 多主体账套（XBJ 等）SAP 布局探测返回 None →
+            #   SR 空 → discover 恒 0 主体 → run_u8_on_sap 对 XBJ 全量跑不了（OK 0）。
+            #   回退 audit_common 的 U8 通用发现（能识别 XBJ 201 个长项目名主体），
+            #   结构转适配层 {code: {year: {km, gl(list), aux}}}。
+            out = {}
+            try:
+                from audit_common import discover_entities as _de_u8
+                _u8 = _de_u8(_d)
+                for _c, _yd in _u8.items():
+                    for _yy, _bun in _yd.items():
+                        if not isinstance(_bun, dict):
+                            continue
+                        _km = _bun.get('km')
+                        _gl = _bun.get('gl')
+                        out.setdefault(str(_c), {})[str(_yy)] = {
+                            'km': _km,
+                            'gl': [_gl] if isinstance(_gl, str) else _gl,
+                            'aux_ar': _bun.get('aux_ar'),
+                            'aux_ap': _bun.get('aux_ap'),
+                        }
+            except Exception:
+                out = {}
         _CACHE_ENT[_d] = out
     if _current_comp and _current_comp in out:
         return {_current_comp: out[_current_comp]}

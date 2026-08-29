@@ -85,9 +85,17 @@ def main():
         mt = _latest_mtime(out_dir)
         alive = True
         if pid is not None:
+            # ⚡⚡ 2026-08-29 修复：Windows 上 os.kill(pid, 0) 对存在的进程可能抛
+            #   PermissionError（无权限探测）——原被 OSError 兜底误判"进程死亡"。
+            #   ProcessLookupError=真不存在；PermissionError=存在但无权探测。
             try:
                 os.kill(pid, 0)
-            except (OSError, ProcessLookupError):
+                alive = True
+            except ProcessLookupError:
+                alive = False
+            except PermissionError:
+                alive = True
+            except OSError:
                 alive = False
         progressed = mt > last + 1
         if progressed:

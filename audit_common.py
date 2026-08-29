@@ -1558,7 +1558,12 @@ def add_audit_summary_sheets(wb, data_dir, items, tb_full=None, entities=None, F
                                     and any(str(cc).startswith(p) for p in codes)}
                             if any(str(c) != cc2 and cc2.startswith(str(c)) for cc2 in _hit):
                                 continue  # 本行是父级（有后代同族行）→ 剔除，只计末级
-                        tot += (v['df'] if is_credit else v['jf'])
+                        # ⚡⚡ 2026-08-29 P0 修复：损益审定表取【净发生额】而非毛发生额。
+                        #   原 费用取 jf / 收入取 df（毛额），财务费用含大额贷方（汇兑收益/利息
+                        #   收入）被虚增（1357 1220 主体 jf=1.077亿 vs 净额 682万，审定表合计
+                        #   1.282亿 vs 明细表 978万，差 1.18亿）。与明细表（净额/qm）口径一致：
+                        #   收入类=df-jf（净贷方），费用类=jf-df（净借方）。
+                        tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
                     return tot
 
                 # ---- 按核算主体列示（by_entity） ----

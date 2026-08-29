@@ -2548,11 +2548,20 @@ def build_subject_workbook(data_dir, template_path, code, name, entities, years,
         try:
             from pl_detail import write_footnote_sheet as _wfn, nat_amt as _nat
             # 构造 gl_agg 同源数据：{(subj, e, l2, y): [dr, cr]}
+            # ⚡⚡ 2026-08-29 用户铁律：TB=审定表=明细表=附注。附注改由【TB 净额】
+            #   （tb_l2_control，与明细表/审定表同源）构造，不再用 GL（read_all_gl）
+            #   ——原 1010 财务费用附注=GL 口径（汇兑损失 2571万含期初）与明细表
+            #   TB 净额（1192万）不一致。
             gl_agg_note = {}
-            for _yy, _d in (gl or {}).items():
-                for (_e, _c, _l2), _arr in _d.items():
-                    if _c == code:
-                        gl_agg_note[(name, _e, _l2, _yy)] = [sum(_arr[:12]), sum(_arr[12:])]
+            for _e in entities:
+                for _l2, _nm in (tb_l2_names.get(code) or {}).items():
+                    _net = tb_l2_control.get((_e, code, _l2, str(y)), 0.0)
+                    if abs(_net) > 0.005:
+                        # ⚡⚡ _l2 用【二级名称】作 key（write_footnote_sheet 的 l2_keep
+                        #   = rows_spec row[2] 即名称，原用 6 位码 '660301' 匹配失败 → 附注全 0）。
+                        #   net 带符号放借方列（nat_amt('exp') 取 debit）：负数科目
+                        #   （利息收入/汇兑收益）原放贷方列被忽略 → 显示 0 → 附注合计失真。
+                        gl_agg_note[(name, _e, _nm, str(y))] = [_net, 0.0]
             # ⚡⚡ 2026-08-28 统一 GL 主口径：附注同源 GL 净额（read_all_gl 四类统一净额），
             #   不再用费用目录覆盖（避免审定/明细 GL 与附注费用目录口径差）。
             #   ⚡ 研发费用归并碎片（_RD_MERGE_MAP['gl']）金额并入目标二级，

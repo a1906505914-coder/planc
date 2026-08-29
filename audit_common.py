@@ -161,6 +161,30 @@ def _safe_save(wb, out_path):
             return None, f'目标与副本均无法写入：{out_path} / {alt}（{_e2}）'
 
 
+def move_if_free(src, dst):
+    """锁感知搬移（2026-08-29 防 bank PermissionError 类回退）：
+    dst 被占用（Excel/WPS 打开：检测 ~$ 锁文件 + 独占打开探测）时打印明确提示并跳过，
+    不抛异常。返回 True=搬移成功 / False=目标占用跳过 / None=其他异常。"""
+    base = os.path.basename(dst)
+    lock = os.path.join(os.path.dirname(dst) or '.', '~$' + base)
+    if os.path.exists(lock):
+        print(f'  ⚠️ 目标被 Excel/WPS 占用（检测到 ~$ 锁文件）：{base}，跳过搬移，请关闭该文件后重跑')
+        return False
+    if os.path.exists(dst):
+        try:
+            _fd = os.open(dst, os.O_RDWR)
+            os.close(_fd)
+        except (PermissionError, OSError):
+            print(f'  ⚠️ 目标被占用（Excel/WPS 打开中？）：{base}，跳过搬移，请关闭该文件后重跑')
+            return False
+    try:
+        os.replace(src, dst)
+        return True
+    except Exception as _e:
+        print(f'  ⚠️ 搬移失败 {os.path.basename(src)} → {base}：{_e}')
+        return None
+
+
 
 # ===================== 进程级缓存 =====================
 _CACHE_TB = {}

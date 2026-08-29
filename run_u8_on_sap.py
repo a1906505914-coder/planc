@@ -107,8 +107,9 @@ def _move_out(comp):
                 base = fn.replace(f'_{YEAR}_生成.xlsx', '')
                 dst = os.path.join(OUT, f'{base}_{comp}.xlsx')
             try:
-                os.replace(src, dst)
-                n += 1
+                from audit_common import move_if_free
+                if move_if_free(src, dst):
+                    n += 1
             except Exception:
                 pass
     return n
@@ -130,8 +131,9 @@ def _move_out_gen(comp, pattern):
                 base = base[:-(len(YEAR) + 1)]
             dst = os.path.join(OUT, f'{base}_{comp}.xlsx')
             try:
-                os.replace(src, dst)
-                n += 1
+                from audit_common import move_if_free
+                if move_if_free(src, dst):
+                    n += 1
             except Exception:
                 pass
     return n
@@ -304,7 +306,8 @@ def run_bank(comp):
     dst = os.path.join(OUT, f'银行存款审计底稿_{comp}.xlsx')
     if os.path.exists(src):
         os.makedirs(OUT, exist_ok=True)
-        os.replace(src, dst)
+        from audit_common import move_if_free
+        move_if_free(src, dst)
     return 1
 
 
@@ -328,7 +331,8 @@ def run_current_account(comp):
             src = os.path.join(_work(), fn)
             dst = os.path.join(OUT, f'{base}_{comp}.xlsx')
             try:
-                os.replace(src, dst)
+                from audit_common import move_if_free
+                move_if_free(src, dst)
             except Exception:
                 pass
     return 1

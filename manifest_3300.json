@@ -1,0 +1,14 @@
+{
+  "comp": "3300",
+  "year": "2026",
+  "data_dir": "300/3300网银明细2026年1-7月",
+  "requirements": [
+    {
+      "name": "bank_reconcile",
+      "params": {
+        "stmt_folder": "300/3300网银明细2026年1-7月",
+        "journal_file": "300/3100网银明细2026年1-7月/3100-3400银行日记账.XLSX"
+      }
+    }
+  ]
+}

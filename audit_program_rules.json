@@ -1,0 +1,68 @@
+{
+  "_doc": "P1-P3 架构预留配置（2026-08-25）。P0 已落地：audit_program.py 统一注入『审计程序执行说明』+『勾稽与异常检查』（表内勾稽 + L4 异常规则 R1/R4）。本文件为 P1-P3 的规则/矩阵配置骨架，后续按需启用。",
+
+  "P1_cross_subject_recon": {
+    "_doc": "跨科目勾稽规则（P1）：配置后由 audit_program 的跨文件/跨表勾稽引擎执行。",
+    "rules": [
+      {
+        "id": "CS1",
+        "name": "应付职工薪酬计提 vs 成本费用中薪酬",
+        "from_sheet": "应付职工薪酬审定表",
+        "from_field": "本期计提",
+        "to_sheet": "成本费用薪酬合计",
+        "to_field": "列支合计",
+        "tolerance": 1.0,
+        "status": "待启用"
+      },
+      {
+        "id": "CS2",
+        "name": "应交税费-增值税销项 vs 应收账款",
+        "from_sheet": "应交税费审定表",
+        "from_field": "销项税额",
+        "to_sheet": "应收账款",
+        "to_field": "含税收入",
+        "tolerance": 1.0,
+        "status": "待启用"
+      },
+      {
+        "id": "CS3",
+        "name": "银行存款 vs 序时账发生额",
+        "from_sheet": "银行存款审定表",
+        "from_field": "本期发生",
+        "to_sheet": "序时账",
+        "to_field": "银行科目发生",
+        "tolerance": 1.0,
+        "status": "待启用"
+      }
+    ]
+  },
+
+  "P1_report_recon": {
+    "_doc": "L3 报表勾稽（P1）：底稿审定数 = TB = 报表列报；集团稿 = Σ单体 + 抵消。",
+    "checks": [
+      {"id": "R1", "name": "审定数 = TB（recon_self 已执行，结果回写底稿）", "status": "已有"},
+      {"id": "R2", "name": "集团审定 = Σ单体 + 抵消（AH 三集团已隐式成立，待显式成表）", "status": "待显式"}
+    ]
+  },
+
+  "P2_evidence_layer": {
+    "_doc": "账套外证据验证层（P2）：科目 × 验证程序 矩阵。现有资产：contract_reader/ocr_gpu（合同）、confirm_mask（函证）、fa_review（固定资产台账）、financing_ledger（融资台账）、bank（银行对账）。",
+    "matrix": [
+      {"subject": "银行存款", "evidence": "银行对账单", "module": "bank_deposit_detail", "status": "已有雏形"},
+      {"subject": "短期/长期借款", "evidence": "借款合同（金额/利率/期限）", "module": "contract_reader+ocr_gpu", "status": "已有雏形"},
+      {"subject": "应收账款/应付账款", "evidence": "函证回函", "module": "confirm_mask", "status": "已有雏形"},
+      {"subject": "固定资产", "evidence": "资产台账/盘点表", "module": "fa_review", "status": "已有雏形"},
+      {"subject": "融资", "evidence": "融资台账", "module": "financing_ledger", "status": "已有雏形"},
+      {"subject": "收入", "evidence": "发票/物流", "module": "待接入", "status": "规划"}
+    ]
+  },
+
+  "P3_footnote_link": {
+    "_doc": "P3 附注联动：底稿审定数 → 自动生成附注 → 报表勾稽。附注汇总 sheet 已由各生成器生成（审定数填列）。",
+    "checks": [
+      {"id": "F1", "name": "每底稿含『附注汇总』sheet（audit_checker 已强制 ERROR 检查）", "status": "已有"},
+      {"id": "F2", "name": "附注审定数 = 审定表审定数（待显式勾稽）", "status": "待显式"},
+      {"id": "F3", "name": "合并附注 = Σ单体附注 + 抵消（合并附注生成依赖，已接入）", "status": "已有"}
+    ]
+  }
+}

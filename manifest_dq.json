@@ -1,0 +1,9 @@
+{
+  "data_dir": "dq",
+  "year": "2025",
+  "requirements": [
+    {"name": "cutoff_test", "params": {}},
+    {"name": "gross_margin", "params": {}},
+    {"name": "confirmation_list", "params": {}}
+  ]
+}

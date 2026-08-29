@@ -1,0 +1,9 @@
+{
+  "data_dir": "g",
+  "year": "2025",
+  "subjects": ["bank", "current_account"],
+  "requirements": [
+    {"name": "gross_margin", "params": {}},
+    {"name": "confirmation_list", "params": {}}
+  ]
+}

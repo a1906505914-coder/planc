@@ -1,0 +1,389 @@
+{
+ "_meta": {
+  "version": 2,
+  "note": "账套元数据配置：结构特征 + 科目名归一化 + 科目代码覆盖。2026-08-07 v2 新增 subject_codes——账套级科目代码覆盖（会计语言优先：标准码在 subjects_registry，账套特例码在此登记，不进全局注册表 → 消除跨账套 codes 撞车）。common_name_map=跨账套通用别名；accounts.<账套>.name_map=账套专属科目名映射；accounts.<账套>.subject_codes=账套专属科目代码映射（key=注册表科目 key，value=该账套实际代码前缀列表）。；2026-08-23 每账套声明 layout（u8/300/ah），detect_sap_layout 冲突时以声明为准并告警。"
+ },
+ "common_name_map": {
+  "递延资产": "长期待摊费用",
+  "投资损益": "投资收益",
+  "资产处理损益": "资产处置损益",
+  "资产处置收益": "资产处置损益",
+  "营业税金及附加": "税金及附加",
+  "股本": "实收资本(或股本)",
+  "其他业务收入结转": "其他业务收入",
+  "主营业务成本结转": "主营业务成本"
+ },
+ "accounts": {
+  "ACB": {
+   "note": "诚本；标准科目余额表格式",
+   "name_map": {},
+   "subject_codes": {},
+   "layout": "u8"
+  },
+  "GJX": {
+   "note": "DQ；单主体",
+   "name_map": {},
+   "subject_codes": {
+    "di": [
+     "2601"
+    ]
+   },
+   "layout": "u8"
+  },
+  "ARF": {
+   "note": "日发集团；单主体单年度",
+   "name_map": {},
+   "subject_codes": {},
+   "layout": "u8"
+  },
+  "AYL": {
+   "note": "上海朗炫/长天等多主体",
+   "name_map": {},
+   "subject_codes": {},
+   "layout": "u8"
+  },
+  "AJJ": {
+   "note": "金洁环境；1801 科目名『递延资产』(旧准则名)，实收资本=3003 股本，4001=生产成本(撞标准码)，交易性金融资产=1003、预计负债=2301",
+   "name_map": {
+    "递延资产": "长期待摊费用"
+   },
+   "subject_codes": {
+    "paid_in": [
+     "3003"
+    ],
+    "tfa": [
+     "1003"
+    ],
+    "ep": [
+     "2301"
+    ],
+    "reserve_fund": [
+     "3100"
+    ]
+   },
+   "layout": "u8"
+  },
+  "ADZ": {
+   "note": "东轴/仁旭/尚风等；科目代码含字母后缀(2241A4=2241 其他应付款子科目)",
+   "alpha_suffix_codes": true,
+   "name_map": {},
+   "subject_codes": {},
+   "layout": "u8"
+  },
+  "AJ": {
+   "note": "ga/jj 分主体；TB 表头『科目编码』、无 4 位父级行、科目名反斜杠分层、无综合查询明细表(仅序时账)；合并稿 merge_source=self_tb（与自建试算表同源）",
+   "tb_header": "科目编码",
+   "no_parent_rows": true,
+   "path_sep": "\\",
+   "no_gl": true,
+   "name_map": {},
+   "subject_codes": {
+    "contract_asset": [
+     "1125",
+     "1480"
+    ],
+    "reserve_fund": [
+     "4004",
+     "4301"
+    ],
+    "rua": [
+     "1509",
+     "1510",
+     "1681"
+    ],
+    "other_income": [
+     "6121"
+    ],
+    "tax_surcharge": [
+     "6403"
+    ]
+   },
+   "merge_source": "self_tb",
+   "layout": "u8"
+  },
+  "AQ": {
+   "note": "Audio/QG；投资收益=投资损益、资产处置损益=资产处理损益、一年内到期=2401、租赁负债=227102(非标准码)、应收票据=1021、合同资产=1462",
+   "name_map": {
+    "投资损益": "投资收益",
+    "资产处理损益": "资产处置损益"
+   },
+   "subject_codes": {
+    "note_recv": [
+     "1021"
+    ],
+    "contract_asset": [
+     "1462"
+    ],
+    "ncl": [
+     "2401"
+    ],
+    "ll": [
+     "2271",
+     "227102"
+    ]
+   },
+   "layout": "u8"
+  },
+  "AFJ": {
+   "note": "AF/FG/SF 等 9 主体；TB 含『核算维度编码』表头行噪音；2026-08-23 合并稿走 self_tb（与自建试算表同源，资产→负债→权益→损益 + 2-3 级科目）",
+   "name_map": {},
+   "subject_codes": {},
+   "merge_source": "self_tb",
+   "layout": "u8"
+  },
+  "AS": {
+   "note": "Freezing/SH/Star/energy/pot；4104=利润分配(撞专项储备标准码)、一年内到期=2703、租赁负债=2702（registry ll 标准码 2601 等 AS 未用）",
+   "name_map": {},
+   "subject_codes": {
+    "ncl": [
+     "2703"
+    ],
+    "ll": [
+     "2702"
+    ]
+   },
+   "layout": "u8"
+  },
+  "ATT": {
+   "note": "北京同心/江西图之腾/股份公司；实收资本两主体不同代码(3001/4001 同名)、租赁负债=2802、预计负债=2801(非标准码)、合同负债=2204、一年内到期=2281",
+   "name_map": {},
+   "subject_codes": {
+    "ll": [
+     "2802"
+    ],
+    "ep": [
+     "2801"
+    ],
+    "contract_liab": [
+     "2204"
+    ],
+    "ncl": [
+     "2281"
+    ]
+   },
+   "layout": "u8"
+  },
+  "AZ": {
+   "note": "泰国账套(上分/北分/数链)；泰国科目名(应收账款和应收票据/预付费用…)→ 标准名走 thai_mapping，长期借款=2138.02；长期股权投资=1511 标准码（1641 在 Z=使用权资产，勿误配 lti）",
+   "thai": true,
+   "name_map": {},
+   "subject_codes": {
+    "lt_loan": [
+     "2138",
+     "2138.02"
+    ]
+   },
+   "layout": "u8"
+  },
+  "GFY": {
+   "note": "浙江方圆检测集团 12 实体双期间；研发费用在管理费用项下核算(6602.33)",
+   "name_map": {},
+   "subject_codes": {},
+   "layout": "u8"
+  },
+  "AH": {
+   "note": "SAP 大账套（88 家主体）；SAP 方言码实测 2026-08-09（铁律61）：1811递延所得税/2401递延收益/2260租赁负债/2402预提/2701长期应付款/2502应付债券/1831其他非流动/1301委托贷款/1504待摊/1801长摊/1532未实现融资收益/1501持有至到期/1503其他权益工具/4004其他权益工具/1607在建减值/1131应收股利/1132应收利息/4102专项储备/1521投资性房地产/1608使用权资产/1609使用权累计折旧/1222备用金/1412包装物/1489碳排放权/1123预付/6730其他收益/6741信用减值/6701资产减值/2221应交税费；合并稿 merge_source=self_tb（SAP 同源直取，铁律130b）",
+   "acct_type": "sap",
+   "name_map": {},
+   "subject_codes": {
+    "other_income": [
+     "6730"
+    ],
+    "credit_impair": [
+     "6741"
+    ],
+    "asset_impair": [
+     "6701"
+    ],
+    "contract_asset": [
+     "1124"
+    ],
+    "asset_disposal": [
+     "6720"
+    ]
+   },
+   "merge_source": "self_tb",
+   "layout": "ah"
+  },
+  "ADF": {
+   "note": "300 集团（3000-3900/6100/6900 主体）；网银核对主账套；回归走 audit_checker 全量；2026-08-23 集团合并稿走 self_tb（试算表同源，3100/3200 无序时账暂不并入）",
+   "acct_type": "checker",
+   "merge_source": "self_tb",
+   "name_map": {},
+   "subject_codes": {},
+   "layout": "300"
+  },
+  "XBJ": {
+   "note": "兵团水利水电（3003 pilot，202 主体）；银行存款=1002 银行存款 + 1004 内部结算中心存款（项目部资金走内部结算中心，2026-08-15 实测 202 主体分布：137 有1002/184 有1004）",
+   "acct_type": "u8",
+   "name_map": {},
+   "subject_codes": {
+    "bank_deposit": [
+     "1002",
+     "1004"
+    ]
+   },
+   "merge_subjects": [
+    {
+     "name": "合同资产",
+     "signed": true
+    },
+    {
+     "name": "应付账款",
+     "signed": "credit"
+    },
+    {
+     "name": "其他应付款",
+     "signed": "credit"
+    },
+    {
+     "name": "合同负债",
+     "signed": "credit"
+    },
+    {
+     "name": "内部结算中心存款",
+     "signed": true
+    },
+    {
+     "name": "临时设施",
+     "signed": true
+    },
+    {
+     "name": "临时设施摊销",
+     "signed": true
+    },
+    {
+     "name": "预提费用",
+     "signed": "credit"
+    },
+    {
+     "name": "抵债资产",
+     "signed": true
+    },
+    {
+     "name": "贷款",
+     "signed": true
+    },
+    {
+     "name": "长期应收款",
+     "signed": true
+    },
+    {
+     "name": "长期应付款",
+     "signed": "credit"
+    },
+    {
+     "name": "应付股利",
+     "signed": "credit"
+    },
+    {
+     "name": "应收票据",
+     "signed": true
+    },
+    {
+     "name": "应收利息",
+     "signed": true
+    },
+    {
+     "name": "累计折旧",
+     "signed": true
+    },
+    {
+     "name": "累计摊销",
+     "signed": true
+    },
+    {
+     "name": "持有待售资产",
+     "signed": true
+    },
+    {
+     "name": "坏账准备",
+     "signed": true
+    },
+    {
+     "name": "合同资产减值准备",
+     "signed": true
+    },
+    {
+     "name": "待摊费用",
+     "signed": true
+    },
+    {
+     "name": "抵债资产跌价准备",
+     "signed": true
+    },
+    {
+     "name": "持有待售资产减值",
+     "signed": true
+    },
+    {
+     "name": "贷款损失准备",
+     "signed": true
+    },
+    {
+     "name": "主营业务成本",
+     "side": "debit"
+    },
+    {
+     "name": "其他业务成本",
+     "side": "debit"
+    },
+    {
+     "name": "未分配利润",
+     "display": "未分配利润",
+     "names": [
+      "利润分配",
+      "本年利润"
+     ],
+     "signed": "credit"
+    },
+    {
+     "name": "应交税费",
+     "signed": "credit"
+    },
+    {
+     "name": "资本公积",
+     "signed": "credit"
+    },
+    {
+     "name": "盈余公积",
+     "signed": "credit"
+    },
+    {
+     "name": "存货",
+     "display": "存货",
+     "names": [
+      "房地产开发成本",
+      "原材料",
+      "库存商品",
+      "周转材料",
+      "低值易耗品",
+      "存货跌价准备"
+     ],
+     "signed": true
+    },
+    {
+     "name": "固定资产",
+     "signed": true
+    },
+    {
+     "name": "应收账款",
+     "signed": true
+    },
+    {
+     "name": "其他应收款",
+     "signed": true
+    },
+    {
+     "name": "应付职工薪酬",
+     "signed": "credit"
+    },
+    {
+     "name": "预付账款",
+     "signed": true
+    }
+   ],
+   "layout": "u8"
+  }
+ }
+}

@@ -1,0 +1,26 @@
+{
+  "_meta": {
+    "note": "审计抽样规模配置。default=全局默认；accounts.<账套名>.<科目名或关键词>=账套覆盖。om=整体重要性(元) pm=实际执行重要性(元) sad=明显微小阈值(元) risk=固有×控制风险等级(high=95%置信/medium=90%/low=80%) loop=循环类型(attribute属性/variable变量/pps货币单位) tol_rate=可容忍偏差率 exp_rate=预计偏差率"
+  },
+  "default": {
+    "om": 10000000,
+    "pm": 5000000,
+    "sad": 500000,
+    "risk": "medium",
+    "loop": "variable",
+    "tol_rate": 0.05,
+    "exp_rate": 0.02
+  },
+  "accounts": {
+    "dq": {
+      "营业收入": {"om": 80000000, "pm": 40000000, "sad": 4000000, "loop": "pps", "risk": "high"},
+      "营业成本": {"om": 80000000, "pm": 40000000, "sad": 4000000, "loop": "pps", "risk": "high"},
+      "应收账款": {"om": 80000000, "pm": 40000000, "sad": 4000000, "loop": "pps", "risk": "high"},
+      "存货": {"om": 80000000, "pm": 40000000, "sad": 4000000, "loop": "pps", "risk": "high"},
+      "管理费用": {"loop": "attribute", "risk": "high", "om": 20000000, "pm": 10000000, "sad": 1000000},
+      "财务费用": {"loop": "attribute", "risk": "high", "om": 20000000, "pm": 10000000, "sad": 1000000},
+      "销售费用": {"loop": "attribute", "risk": "high", "om": 20000000, "pm": 10000000, "sad": 1000000},
+      "所得税费用": {"loop": "attribute", "risk": "high", "om": 20000000, "pm": 10000000, "sad": 1000000}
+    }
+  }
+}

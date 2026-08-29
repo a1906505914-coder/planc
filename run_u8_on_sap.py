@@ -692,8 +692,11 @@ def main(argv=None):
     if '--skip-check' not in argv:
         try:
             import sheet_gap_check
-            _errs, _issues = sheet_gap_check.scan_folder_with_tb(DATA)
-            print(f'\n═════ 自动质检 ═════')
+            # ⚡⚡ 2026-08-29 P0 修复（用户痛点"空白底稿要逐张点开检查"根因）：
+            #   原 scan_folder_with_tb(DATA) 扫 DATA/底稿（旧单体稿目录），集团模式实际
+            #   输出在 --out-dir → 集团底稿从未被空表扫描覆盖。改扫实际 OUT。
+            _errs, _issues = sheet_gap_check.scan_folder_with_tb(DATA, folder=OUT)
+            print(f'\n═════ 自动质检（扫 {OUT}）═════')
             print(f'  空表扫描: {_errs} ERROR / {len(_issues)} 项')
             _n_err = 0
             _rep = []
@@ -706,7 +709,7 @@ def main(argv=None):
                 print('  ✅ 关键表全部有数据（无取数丢失）')
             try:
                 import audit_checker
-                _te, _tw = audit_checker.process_folder(os.path.join(DATA, '底稿') if os.path.isdir(os.path.join(DATA, '底稿')) else DATA, quiet=True)
+                _te, _tw = audit_checker.process_folder(OUT if os.path.isdir(OUT) else DATA, quiet=True)
                 print(f'  audit_checker: {_te} ERROR / {_tw} WARN')
             except Exception as _ex:
                 print(f'  ⚠️ audit_checker 异常: {_ex}')

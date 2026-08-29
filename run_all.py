@@ -85,7 +85,27 @@ def main():
         check_cmd += ['--allow', allow]
     cp = subprocess.run(check_cmd, capture_output=True, text=True, encoding='utf-8')
     print(cp.stdout[-1200:] if cp.stdout else '  (无指纹输出)')
-    print(f'\n一键全套完成：exit={rc}；指纹回归 {"⚠️ 有差异需检查" if cp.returncode else "✅ 无意外回退"}（耗时 {time.time()-t0:.0f}s）')
+    # ⚡ 2026-08-29 P1 完整性检查：生成后自动出"底稿完整性总表"，替代逐张点开检查
+    if target == 'ah':
+        comp_root = AH_OUT
+        comp_data = AH_DATA
+    else:
+        comp_root = os.path.join(target, '底稿')
+        comp_data = os.path.abspath(target)
+    _wc_dir = comp_root if os.path.isdir(comp_root) else target
+    try:
+        import subprocess as _sp
+        _rep = os.path.join(BASE, 'completeness_reports', f'完整性检查_{time.strftime("%Y%m%d_%H%M%S")}.md')
+        _wc = _sp.run([PY, '-X', 'utf8', os.path.join(BASE, 'wp_completeness_check.py'),
+                       '--dir', _wc_dir, '--data', comp_data, '--report', _rep],
+                      capture_output=True, text=True, encoding='utf-8')
+        _tail = (_wc.stdout or '')[-900:]
+        print(_tail)
+        if _wc.returncode == 1:
+            print(f'⛔ 完整性检查存在 ERROR（详见 {_rep}），交付前请处理')
+    except Exception as _ex:
+        print(f'  ⚠️ 完整性检查失败: {_ex}')
+    print(f'\n一键全套完成：exit={rc}；指纹回归 {"⚠️ 有差异需检查" if cp.returncode else "✅ 无意外回退"}；完整性报告已生成（耗时 {time.time()-t0:.0f}s）')
     return rc or cp.returncode
 
 

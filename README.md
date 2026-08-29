@@ -42,6 +42,7 @@
 8. **运行报告**：每次运行自动写 `run_history/run_{时间}.md`（数据包/参数/git commit/代码签名/OK·SKIP·FAIL 明细/失败 traceback）——任何一份底稿都能追溯「哪个版本代码+哪批数据生成的」。
 9. **运行前自检（preflight）**：`run_all.py` 跑前自动检查磁盘空间/文件占用/并发/数据完整性，BLOCK 阻断、WARN 提示（`--skip-preflight` 跳过）。
 10. **看门狗（卡死检测）**：长任务运行时另开终端 `python watchdog_check.py <数据目录>`，心跳停滞超 30 分钟即告警并写 `.ALERT_*` 标记（preflight 会提示处理）；`--clean` 清理标记。
+11. **底稿完整性检查（替代逐张点开）**：`python wp_completeness_check.py` 一键扫全部底稿，产出**完整性总表**（每底稿一行：关键表数/空关键表/ERROR/WARN/状态）+ 异常明细，一眼看出哪些底稿有问题。`run_all.py` 已自动集成（生成后自动出报告到 `completeness_reports/`）。
 
 ## 五、常见问题
 

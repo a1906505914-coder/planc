@@ -467,7 +467,17 @@ def write_sheet(ws, agg, year, spec):
     for (ent, side, opp), v in agg.items():
         side_tot[(ent, side)] += v['amt']
     r = 4
-    for (ent, side, opp), v in sorted(agg.items(), key=lambda x: (x[0][0], x[0][1], -x[1]['amt'])):
+    items = sorted(agg.items(), key=lambda x: (x[0][0], x[0][1], -x[1]['amt']))
+    _prev_key = None
+    for (ent, side, opp), v in items:
+        # ⚡⚡ 2026-08-29 P0：小计行内联到每块明细尾（原集中排最后 → audit_checker
+        #   块级小计范围=「上一合计行之后」，第一个小计被按表头后全部明细求和 → 误报 ERROR）
+        if _prev_key is not None and (ent, side) != _prev_key:
+            _e, _s = _prev_key
+            ws.cell(r, 1, _e); ws.cell(r, 3, _s + '方小计')
+            ws.cell(r, 5, round(side_tot[(_e, _s)], 2)); ws.cell(r, 5).number_format = '#,##0.00'
+            r += 1
+        _prev_key = (ent, side)
         verdict, note = _classify(opp, spec, side)
         pct = v['amt'] / side_tot[(ent, side)] * 100 if side_tot.get((ent, side)) else 0.0
         ws.cell(r, 1, ent); ws.cell(r, 2, year); ws.cell(r, 3, side)
@@ -485,10 +495,10 @@ def write_sheet(ws, agg, year, spec):
             for j in range(1, ncols + 1):
                 ws.cell(r, j).fill = PatternFill('solid', fgColor='FFF2CC')
         r += 1
-    for (ent, side) in sorted(side_tot):
-        ws.cell(r, 1, ent); ws.cell(r, 3, side + '方小计')
-        ws.cell(r, 5, round(side_tot[(ent, side)], 2))
-        ws.cell(r, 5).number_format = '#,##0.00'   # 2026-08-29 千分位
+    if _prev_key is not None:
+        _e, _s = _prev_key
+        ws.cell(r, 1, _e); ws.cell(r, 3, _s + '方小计')
+        ws.cell(r, 5, round(side_tot[(_e, _s)], 2)); ws.cell(r, 5).number_format = '#,##0.00'
         r += 1
     for j, w in enumerate([14, 8, 6, 34, 16, 8, 10, 8, 46], 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(j)].width = w

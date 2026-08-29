@@ -34,21 +34,31 @@ _KEY_SHEET_KW = ('审定表', '明细表', '附注汇总', '余额表', '台账'
 
 
 def _key_sheets(ws_list):
-    return [s for s in ws_list if any(k in s for k in _KEY_SHEET_KW)]
+    """关键表（含这些词的 sheet 空=异常）。⚡ 2026-08-29：排除『分部门』——SAP 无部门
+    辅助核算，分部门明细表为注记型空表（sheet_gap_check._OPTIONAL_SHEET_KW 已识别）。"""
+    return [s for s in ws_list
+            if any(k in s for k in _KEY_SHEET_KW)
+            and '分部门' not in s and '勾稽' not in s]
 
 
 def _count_numeric_rows(ws):
-    """关键表数值行数（剔除表头/合计/小计/说明行后的非零数值行数）。"""
+    """关键表数值行数（剔除表头/合计/小计/说明行后的非零数值行数）。
+    ⚡⚡ 2026-08-29 修复误报：原要求 A 列非空——合并单元格布局（科目名在 B 列、A 列空）
+    的表被误判 0 行（专项储备/实收资本明细表明明有数据）。改为整行有非零数值即计 1 行，
+    仅按 A 列标识剔除说明/合计/表头行。"""
     n = 0
     try:
         for row in ws.iter_rows(values_only=True):
-            if not row or row[0] is None:
+            if not row:
                 continue
-            a = str(row[0]).strip()
-            if not a or a.startswith(('勾稽', '注', '说明', '口径', '合计', '小计', '总计')):
-                continue
-            if any(k in a for k in ('核算主体', '科目', '项目', '期间', '年度', '序号', '账户', '对方科目', '摘要', '日期')):
-                continue
+            a = str(row[0]).strip() if row[0] is not None else ''
+            if a:
+                # 表头/说明/合计行排除（A 列标识）
+                if a.startswith(('勾稽', '注', '说明', '口径', '备注', '核对说明', '差异',
+                                 '合计', '小计', '总计', '年度', '期间', '序号', '核算',
+                                 '账套主体', '项目', '审计调整', '审计程序', '审计盘点',
+                                 '审计抽凭', '审计结论', '审计情况', '审计发现')):
+                    continue
             for c in row[1:]:
                 if isinstance(c, (int, float)) and abs(c) > 0.005:
                     n += 1

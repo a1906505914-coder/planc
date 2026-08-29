@@ -529,7 +529,23 @@ def inject_into_wb(wb, gl, year, spec, ents=None):
         return 'empty'
     ws = wb.create_sheet('对方科目核对')
     write_sheet(ws, agg, year, spec)
+    _move_before_prog(wb, ws)
     return 'ok'
+
+
+def _move_before_prog(wb, ws):
+    """⚡⚡ 2026-08-29 顺序规范：对方科目核对若排在『审计程序执行说明/勾稽与异常检查』
+    之后（audit_program 末尾注入已发生），audit_checker 报『未置于末尾』WARN →
+    把新 sheet 移到审计程序说明之前。若程序表尚不存在（注入先于 audit_program）则保持末尾。"""
+    try:
+        _sns = wb.sheetnames
+        if '审计程序执行说明' in _sns:
+            _ix = _sns.index('审计程序执行说明')
+            if ws in wb._sheets:
+                wb._sheets.remove(ws)
+                wb._sheets.insert(_ix, ws)
+    except Exception:
+        pass
 
 
 def inject_into_wb_auto(wb, data_dir, year, spec_key, ents_set=None):

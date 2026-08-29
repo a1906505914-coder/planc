@@ -7514,7 +7514,8 @@ def build_all_in_dir(data_dir, out_dir=None, period_mode="Y", subject=None, only
                                           by_ent=by_ent, aging_map=aging_map, bucket_type=bt, km_path=comb_km,
                                           out_dir=out_dir, data_dir=data_dir, subj_key=key,
                                           entities_dict=entities, aging_methods=methods_used,
-                                          target_year=_y, prior_meta=prior_meta)
+                                          target_year=_y, prior_meta=prior_meta,
+                                          tb_full=_tb_full, ac_ents=_ac_ents)
                 _wb_out.close()
                 print(f'✅ [xw] 已生成：{_out_y}（合并 {len(entities)} 个核算主体，末级行合计 {n_total}）')
                 if _first_out is None:

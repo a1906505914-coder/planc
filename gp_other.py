@@ -450,20 +450,28 @@ def _family_level2(tb, ent, year, codes, gl_names=None):
             if not _good:
                 return []
     norm = [c for c, _, _ in fam]
+    # ⚡⚡ 2026-08-29 P0：gl_names 行级过滤——codes 命中族后，族内名称不匹配的行剔除。
+    #   （ncl codes 加 2501 后，2501010000『一年以上长期借款』误入一年内到期明细表；
+    #    族级互斥只判"族是否属于该科目"，不筛行。）
+    _gns = [g for g in (gl_names or []) if g]
+    def _row_hit(n):
+        if not _gns:
+            return True
+        return any(g in str(n) or str(n) in g for g in _gns)
     rows = []
     for c, n, v in fam:
-        if len(c) == 6:  # 2 级明细（本项目标准明细粒度）
+        if len(c) == 6 and _row_hit(n):  # 2 级明细（本项目标准明细粒度）
             rows.append((c, n, v['qc'], v['jf'], v['df'], v['qm']))
     # 若没有 6 位子目（个别科目仅 4 位一级），则退化为展示一级
     if not rows:
         # ⚡ 2026-08-10 SAP：TB 只有 10 位末级码（2401010000 递延收益-搬迁收益），
         # len==6/4 均不满足 → 明细表空壳。铁律73 明细到末级 → 直接展开 10 位末级。
-        ten = [(c, n, v) for c, n, v in fam if len(c) == 10]
+        ten = [(c, n, v) for c, n, v in fam if len(c) == 10 and _row_hit(n)]
         if ten:
             rows = [(c, n, v['qc'], v['jf'], v['df'], v['qm']) for c, n, v in ten]
         else:
             for c, n, v in fam:
-                if len(c) == 4:
+                if len(c) == 4 and _row_hit(n):
                     rows.append((c, n, v['qc'], v['jf'], v['df'], v['qm']))
     return rows
 
@@ -640,7 +648,8 @@ SUBJECTS = [
     # ⚡⚡ 2026-08-24 恢复 2401：AQ 等账套 2401=一年内到期的非流动负债（不能删）。
     #   同代码多语义（AS 2401=递延收益）由 _family_level2 的 gl_names 名称互斥裁决：
     #   名称含『一年内到期』才归 ncl（AS 递延收益自动排除）。删代码是治标且破坏 AQ。
-    dict(key='ncl',  name='一年内到期的非流动负债', codes=['2242', '2485', '2401', '2281', '2703'], is_credit=True,  gl_names=['一年内到期']),
+    dict(key='ncl',  name='一年内到期的非流动负债', codes=['2242', '2485', '2401', '2281', '2703', '2501'], is_credit=True,
+         gl_names=['一年内到期的长期借款', '一年内到期的应付债券', '一年内到期的租赁负债', '一年内到期的长期应付款']),
     dict(key='di',   name='递延收益',           codes=['2401', '2601'], is_credit=True,  gl_names=['递延收益']),
     dict(key='sp',   name='专项应付款',         codes=['2711'], is_credit=True,  gl_names=['专项应付款']),
     dict(key='lpay', name='长期应付款',         codes=['2701'], is_credit=True,  gl_names=['长期应付款']),

@@ -17,12 +17,25 @@ import xw_period_sheet as XP
 def build_xw_export(output, periods, comb_customers, comb_summary, issues, comb_rows,
                     comb_counterparties, mode="Y", subj=None, by_ent=None, aging_map=None,
                     bucket_type=None, km_path=None, out_dir=None, data_dir=None, subj_key=None,
-                    entities_dict=None, aging_methods=None, target_year=None, prior_meta=None):
+                    entities_dict=None, aging_methods=None, target_year=None, prior_meta=None,
+                    tb_full=None, ac_ents=None):
     """xw 版合并底稿导出。参数同 export_combined_excel。返回 xlsxwriter wb（调用方 close）。"""
     label = subj["label"] if subj else "往来科目"
     periods = [p for p in periods if p != "全部"] or list(periods)
     _render_periods = [target_year] if target_year is not None else periods
     wb = X.new_workbook(output)
+    # ---- P2 阶段3（第1步）：审定表（按核算主体；数据取 TB，置于明细表之前）----
+    if tb_full and ac_ents and subj:
+        try:
+            import xw_audit_sheet as _XAS
+            _title = f'{subj.get("label", label)} 审定表'
+            _XAS.render_audit_summary_xw(
+                wb, _title, subj.get("label", label), tb_full, ac_ents,
+                target_year=target_year,
+                names=[subj.get("kw", "")] if subj.get("kw") else None,
+                is_credit=(subj.get("nature") == "liability"))
+        except Exception as _ex:
+            print(f'  ⚠️ 审定表 xw 失败：{_ex}')
     # ---- 明细表（核心大表，流式）----
     for pk in _render_periods:
         ws = wb.add_worksheet(f"{label}明细表_{pk}")

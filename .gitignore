@@ -5,6 +5,7 @@ __pycache__/
 
 # 临时/测试脚本（顶层下划线开头，非正式模块）
 /_bench_*.py
+/_xw_*.py
 /_xw_bench*.py
 /_inj_*.py
 /_dbg_*.py

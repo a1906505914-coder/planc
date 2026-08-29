@@ -257,10 +257,27 @@ def inject_program_sheets(wb, meta=None):
         anom = _anomaly_rules(wb)
         _build_program_sheet(wb, steps, label)
         _build_recon_sheet(wb, recon, anom)
+        # ⚡⚡ 2026-08-29 P0：强制两张程序表置工作簿末尾——部分模块在 audit_program
+        #   注入之后才 create_sheet（对方科目核对等），导致程序表不在末尾 → audit_checker
+        #   报『未置于末尾』顺序 WARN（三集团 20 处）。统一收尾：无论注入先后都移到末两位。
+        _move_prog_to_end(wb)
         wb._wb_program_injected = True
     except Exception:
         # 注入失败不影响底稿主体
         wb._wb_program_injected = True
+
+
+def _move_prog_to_end(wb):
+    """把『审计程序执行说明』『勾稽与异常检查』移到 wb._sheets 末尾（保持此顺序）。"""
+    try:
+        _s = wb._sheets
+        _prog = [s for s in _s if s.title == '审计程序执行说明']
+        _rc = [s for s in _s if s.title == '勾稽与异常检查']
+        if _prog or _rc:
+            _others = [s for s in _s if s not in (_prog + _rc)]
+            wb._sheets[:] = _others + _prog + _rc
+    except Exception:
+        pass
 
 
 def _build_program_sheet(wb, steps, label):

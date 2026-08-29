@@ -51,7 +51,36 @@ def build_xw_export(output, periods, comb_customers, comb_summary, issues, comb_
             _render_intra_group_xw(wb, ent_list, comb_customers, comb_summary, _render_periods, label)
         except Exception as _ex:
             print(f'  ⚠️ 内部交易抵消核对 xw 失败：{_ex}')
-    # TODO 阶段2：票据种类拆分 / 背书贴现 / 坏账准备 / 主营客户比 / 附注汇总 / 追加链路（审定表注入）
+    # ---- P2 批次3：坏账准备计算表（AR/ORA）----
+    if subj_key in ("AR", "ORA"):
+        try:
+            _render_baddebt_xw(wb, subj_key, label, _render_periods, comb_customers, comb_summary,
+                               aging_map, bucket_type, entities_dict, target_year)
+        except Exception as _ex:
+            print(f'  ⚠️ 坏账准备 xw 失败：{_ex}')
+    # ---- P2 批次2 接入：票据3表（ARN）+ 异常对应科目凭证清单 ----
+    is_arn = subj and (subj.get("kw") == "应收票据" or subj.get("sheet") == "应收票据明细表")
+    if is_arn:
+        try:
+            _render_bill_type_split_xw(wb, periods, comb_customers, comb_summary, label)
+        except Exception as _ex:
+            print(f'  ⚠️ 票据种类拆分 xw 失败：{_ex}')
+        try:
+            _render_endorse_xw(wb, comb_rows, label)
+        except Exception as _ex:
+            print(f'  ⚠️ 背书贴现 xw 失败：{_ex}')
+        try:
+            _render_note_baddebt_xw(wb, km_path, _render_periods, label)
+        except Exception as _ex:
+            print(f'  ⚠️ 应收票据坏账 xw 失败：{_ex}')
+    try:
+        from current_account_detail import _collect_bad_cps
+        _bad_cps = _collect_bad_cps(_by_ent, subj, _render_periods)
+        if _bad_cps:
+            _render_badcp_voucher_xw(wb, _bad_cps, comb_rows, label)
+    except Exception as _ex:
+        print(f'  ⚠️ 异常凭证清单 xw 失败：{_ex}')
+    # TODO 阶段3：附注汇总 / 追加链路（审定表注入/账龄/减值）
     return wb
 
 
@@ -368,3 +397,120 @@ def _render_badcp_voucher_xw(wb, bad_cps, comb_rows, label):
             n += 1
             break
     return n
+
+
+def _render_baddebt_xw(wb, subj_key, label, periods, comb_customers, comb_summary,
+                       aging_map, bucket_type, entities_dict, target_year=None):
+    """坏账准备计算表（xw，数据口径同 _write_baddebt_calc_sheet；数据全用变量计算，
+    避免 openpyxl 版单元格回读——xlsxwriter 无法回读已写单元格）。"""
+    from current_account_detail import AGING_BUCKETS, _BADDEBT_RATIO, _read_baddebt_tb, SUBJECTS
+    buckets = AGING_BUCKETS.get(bucket_type, AGING_BUCKETS['recv'])
+    ent_list = sorted(entities_dict) if entities_dict else sorted({e for (e, _n) in comb_customers})
+    year = str(target_year if target_year is not None else (periods[-1] if periods else '2025'))
+    kw = '其他应收' if subj_key == 'ORA' else None
+    SUBJ_NM = '其他应收款' if subj_key == 'ORA' else '应收账款'
+    bd = _read_baddebt_tb(entities_dict, year, kw)
+    n = len(ent_list)
+    NC = 4 + n   # A-D + 主体列 + 合计列
+
+    def _aging(ent):
+        out = {b: 0.0 for b in buckets}
+        for (e, _nn) in comb_customers:
+            if e != ent:
+                continue
+            am = aging_map.get(((e, _nn), year), {}) if aging_map else {}
+            for b, v in am.items():
+                out[b] = out.get(b, 0.0) + v
+        return out
+
+    comb_vals = [list(_aging(ent).values()) for ent in ent_list]   # [ent][bi]
+    # ---- 块1 原值 ----
+    orig_rows = []       # (bname, vals)
+    for bi, bname in enumerate(buckets):
+        orig_rows.append((bname, [comb_vals[ei][bi] for ei in range(n)]))
+    combo_sub = [sum(comb_vals[ei]) for ei in range(n)]
+    single_sub = [0.0] * n
+    assoc_sub = [0.0] * n
+    orig_tot = [combo_sub[ei] + single_sub[ei] for ei in range(n)]
+    # ---- 块2 坏账准备应有 ----
+    bd_rows = []
+    for bi, bname in enumerate(buckets):
+        ratio = _BADDEBT_RATIO[bi] if bi < len(_BADDEBT_RATIO) else 1.0
+        bd_rows.append((bname, ratio, [round(comb_vals[ei][bi] * ratio, 2) for ei in range(n)]))
+    bd_sub = [round(sum(bd_rows[bi][2][ei] for bi in range(len(buckets))), 2) for ei in range(n)]
+    bd_single = [0.0] * n
+    bd_tot = [bd_sub[ei] + bd_single[ei] for ei in range(n)]
+    # ---- 块3 净值 ----
+    net_rows = []
+    for bi, bname in enumerate(buckets):
+        net_rows.append((bname, [round(comb_vals[ei][bi] - bd_rows[bi][2][ei], 2) for ei in range(n)]))
+    net_sub = [round(sum(net_rows[bi][1][ei] for bi in range(len(buckets))), 2) for ei in range(n)]
+    net_single = [round(single_sub[ei] - bd_single[ei], 2) for ei in range(n)]
+    net_tot = [net_sub[ei] + net_single[ei] for ei in range(n)]
+    # ---- 块4 调整 ----
+    unaud = [round(bd.get(ent, {}).get('close', 0.0), 2) for ent in ent_list]
+    cont = [0.0] * n
+    adj = [round(bd_tot[ei] - unaud[ei] - cont[ei], 2) for ei in range(n)]
+    tb = [round(bd.get(ent, {}).get('close', 0.0), 2) for ent in ent_list]
+    diff = [round(bd_tot[ei] - tb[ei], 2) for ei in range(n)]
+
+    ws = wb.add_worksheet("坏账准备")
+    X.title(wb, ws, f"{label}—坏账准备计算表（参照 112500-7-6 格式；账龄按 GL 交易日期 FIFO 测算）", NC)
+    hdr = ['项目', '', '账   龄', '计提比例'] + ent_list + ['合计']
+    r = X.dual_header(wb, ws, 1, [("", 2), ("", 2), (SUBJ_NM, n), ("", 1)], hdr,
+                      widths=[22, 26, 10, 10] + [14] * n + [16], freeze_rows=4)
+    mcols = set(range(4, NC))
+    gray = {j: 'D9D9D9' for j in range(NC)}
+    # 块1 原值
+    for bi, (bname, vals) in enumerate(orig_rows):
+        X.row(wb, ws, r, [SUBJ_NM + '原值' if bi == 0 else '', SUBJ_NM + '原值-按账龄组合' if bi == 0 else '',
+                          bname, None] + vals + [round(sum(vals), 2)], money_cols=mcols)
+        r += 1
+    X.row(wb, ws, r, ['', '', '小计', None] + combo_sub + [round(sum(combo_sub), 2)], money_cols=mcols, fills=gray)
+    r += 1
+    for bi, bname in enumerate(buckets):
+        X.row(wb, ws, r, [SUBJ_NM + '原值-单项计提' if bi == 0 else '', '', bname, None] + [0.0] * n + [0.0], money_cols=mcols)
+        r += 1
+    X.row(wb, ws, r, ['', '', '小计', None] + single_sub + [0.0], money_cols=mcols, fills=gray)
+    r += 1
+    for bi, bname in enumerate(buckets):
+        X.row(wb, ws, r, [SUBJ_NM + '合并内关联方' if bi == 0 else '', '', bname, None] + [0.0] * n + [0.0], money_cols=mcols)
+        r += 1
+    X.row(wb, ws, r, ['', '', '小计', None] + assoc_sub + [0.0], money_cols=mcols, fills=gray)
+    r += 1
+    X.row(wb, ws, r, [SUBJ_NM + '原值合计', '合计', '', None] + orig_tot + [round(sum(orig_tot), 2)], money_cols=mcols, fills=gray)
+    r += 1
+    # 块2 坏账准备应有
+    for bi, (bname, ratio, vals) in enumerate(bd_rows):
+        X.row(wb, ws, r, ['坏账准备余额' if bi == 0 else '', '坏账准备应有余额-按账龄组合' if bi == 0 else '',
+                          bname, ratio] + vals + [round(sum(vals), 2)], money_cols=mcols)
+        r += 1
+    X.row(wb, ws, r, ['', '', '小计', None] + bd_sub + [round(sum(bd_sub), 2)], money_cols=mcols, fills=gray)
+    r += 1
+    X.row(wb, ws, r, ['', '坏账准备-单项计提', '', None] + bd_single + [0.0], money_cols=mcols)
+    r += 1
+    X.row(wb, ws, r, ['坏账准备应有余额合计', '合计', '', None] + bd_tot + [round(sum(bd_tot), 2)], money_cols=mcols, fills=gray)
+    r += 1
+    # 块3 净值
+    for bi, (bname, vals) in enumerate(net_rows):
+        X.row(wb, ws, r, [SUBJ_NM + '净值' if bi == 0 else '', SUBJ_NM + '净值-按账龄组合' if bi == 0 else '',
+                          bname, None] + vals + [round(sum(vals), 2)], money_cols=mcols)
+        r += 1
+    X.row(wb, ws, r, ['', '', '小计', None] + net_sub + [round(sum(net_sub), 2)], money_cols=mcols, fills=gray)
+    r += 1
+    X.row(wb, ws, r, ['', SUBJ_NM + '净值-单项计提', '', None] + net_single + [round(sum(net_single), 2)], money_cols=mcols)
+    r += 1
+    X.row(wb, ws, r, [SUBJ_NM + '净值合计', '合计', '', None] + net_tot + [round(sum(net_tot), 2)], money_cols=mcols, fills=gray)
+    r += 2
+    ws.write_string(r, 0, '坏账准备调整')
+    r += 1
+    X.row(wb, ws, r, ['', '坏账准备未审数', '', None] + unaud + [round(sum(unaud), 2)], money_cols=mcols)
+    r += 1
+    X.row(wb, ws, r, ['', '期初续调坏账准备', '', None] + cont + [0.0], money_cols=mcols)
+    r += 1
+    X.row(wb, ws, r, ['', '本期调整数', '', None] + adj + [round(sum(adj), 2)], money_cols=mcols, fills=gray)
+    r += 1
+    X.row(wb, ws, r, ['', 'TB', '', None] + tb + [round(sum(tb), 2)], money_cols=mcols)
+    r += 1
+    X.row(wb, ws, r, ['', '差异（应有余额-账套）', '', None] + diff + [round(sum(diff), 2)], money_cols=mcols)
+    ws.freeze_panes(4, 4)

@@ -26,18 +26,23 @@ PARSER_VERSION = '2026-08-15-v2'   # read_tb_full 表头行位置兼容（XBJ/SS
 
 
 def _file_sig(data_dir, entities, kind):
-    """目录下 km/gl 文件签名（名+mtime+size + 解析器版本）→ md5。"""
+    """目录下 km/gl 文件签名（名+mtime+size + 解析器版本）→ md5。
+    ⚡⚡ 2026-08-29 P0 修复：AH/SAP 账套 entities 的 gl 是【文件列表】（1010-1月.xlsx...），
+    原只当单文件路径 → os.path.isfile(列表) 抛 TypeError → load 恒返回 None → 缓存永远 miss
+    → 每次运行重解析大 GL（1357 247万行 17 分钟/2468 150万行 18 分钟）。支持单/多文件。"""
     files = []
     for e, yd in entities.items():
         for y, p in yd.items():
             for k in ('km', 'gl'):
                 fp = p.get(k) if p else None
-                if fp and os.path.isfile(fp):
-                    try:
-                        st = os.stat(fp)
-                        files.append((os.path.normcase(fp), int(st.st_mtime), st.st_size))
-                    except OSError:
-                        continue
+                fps = fp if isinstance(fp, (list, tuple)) else ([fp] if fp else [])
+                for f in fps:
+                    if f and os.path.isfile(f):
+                        try:
+                            st = os.stat(f)
+                            files.append((os.path.normcase(f), int(st.st_mtime), st.st_size))
+                        except OSError:
+                            continue
     files.sort()
     h = hashlib.md5()
     h.update(kind.encode('utf-8'))

@@ -109,11 +109,6 @@ def check_one(fp, tb_has):
 
 def scan(root, data_root):
     """扫描 root 下全部集团目录/单目录，返回 (rows, detail)。"""
-    tb_map = {}
-    try:
-        tb_map = sheet_gap_check.build_tb_map(data_root, root)
-    except Exception:
-        pass
     dirs = []
     if os.path.isdir(root):
         sub = [os.path.join(root, d) for d in sorted(os.listdir(root))
@@ -122,6 +117,15 @@ def scan(root, data_root):
             dirs = sub            # 集团根：1010/1357/2468 子目录
         else:
             dirs = [root]         # 单目录
+    # ⚡⚡ 2026-08-29 P0 修复：build_tb_map 的 folder 必须含 xlsx 文件（os.listdir 只见文件）。
+    #   集团根目录下只有子目录 → 空 map → 全部默认"TB 有数据"→ 无数据科目被误报 ERROR。
+    #   改为对每个含文件的子目录分别构建再合并。
+    tb_map = {}
+    for d in dirs:
+        try:
+            tb_map.update(sheet_gap_check.build_tb_map(data_root, d))
+        except Exception:
+            pass
     files = []
     for d in dirs:
         files += [(d, f) for f in sorted(glob.glob(os.path.join(d, '*审计底稿*.xlsx')))

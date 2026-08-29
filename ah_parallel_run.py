@@ -10,6 +10,7 @@
 用法：
     python ah_parallel_run.py [--subj current_account,payroll] [--out-dir 集团稿根目录] [--no-resume]
     断点续跑（默认开）：某集团崩溃后重跑会自动跳过已完成科目；--no-resume 强制全量。
+    --jobs N：限制并行集团数（默认 3；内存不足/卡死时用 --jobs 1 串行）。
 """
 import os
 import sys
@@ -49,11 +50,22 @@ def main():
     if '--out-dir' in argv:
         i = argv.index('--out-dir')
         out_root = argv[i + 1]
+    # ⚡⚡ 2026-08-29 P0：并行内存瓶颈防护——三集团并行每进程 7GB+，内存叠加触发
+    #   虚拟内存交换 → 大模块（inventory/tax）卡死数十分钟（实测 18 分钟）。支持
+    #   --jobs N 限制同时运行的集团数（--jobs 1=串行），默认仍 3 并行（内存充足时快）。
+    jobs = 3
+    if '--jobs' in argv:
+        i = argv.index('--jobs')
+        try:
+            jobs = max(1, min(3, int(argv[i + 1])))
+        except Exception:
+            jobs = 3
     t0 = time.time()
     procs = []
     tmp_dir = os.path.join(os.path.expanduser('~'), 'WorkBuddy', '2026-07-15-15-26-19', 'tmp')
     os.makedirs(tmp_dir, exist_ok=True)
-    for g, comps in GROUPS.items():
+    _groups = list(GROUPS.items())
+    for g, comps in _groups:
         out_dir = os.path.join(out_root, g)
         os.makedirs(out_dir, exist_ok=True)
         log = open(os.path.join(tmp_dir, f'ah_parallel_{g}.log'), 'w', encoding='utf-8')
@@ -61,8 +73,13 @@ def main():
                DATA, '--group', '--only', ','.join(comps),
                '--group-name', g, '--out-dir', out_dir] + subj_opt
         print(f'[启动] 集团 {g}（{len(comps)} 主体）-> {out_dir}', flush=True)
-        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
-        procs.append((g, p, log))
+        if jobs < 3:
+            p = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT)
+            log.close()
+            print(f'[完成] 集团 {g}: exit={p.returncode}', flush=True)
+        else:
+            p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+            procs.append((g, p, log))
     # 等待全部完成
     for g, p, log in procs:
         rc = p.wait()

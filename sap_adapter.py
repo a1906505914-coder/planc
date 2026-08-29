@@ -121,14 +121,55 @@ def _scope_comp(path_or_comp):
         #   固定资产/无形资产等全 SKIP。改为：【文件名开头 4 位数字】优先（主体前缀，
         #   3700科目余额表20260731.XLSX → 3700，天然排除尾部日期 0731）；无则取路径
         #   中最后的数字目录段（ADF 2026\3300\ 主体目录在年份后）。
+        # ⚡⚡ 2026-08-29 XBJ U8 长名主体：文件名前缀 4 位（012020年→0120）≠ discover key
+        #   （01年简阳...长名）→ 候选不在 discover 时按【文件名↔key 互为子串】匹配长名主体，
+        #   否则 read_km 返回空 → inventory/rd_expense/revenue 在 XBJ group 全 0。
         _base = os.path.basename(path_or_comp)
         m = re.match(r'^(\d{4})(?=\D|$)', _base)
         if m:
-            return m.group(1)
+            cand = m.group(1)
+            if cand in _discover_keys():
+                return cand
+            return _match_long_name(path_or_comp) or _current_comp
         _digs = re.findall(r'(\d{4})(?=\D|$)', path_or_comp.replace('\\', '/'))
         if _digs:
-            return _digs[-1]
-        return _current_comp
+            cand = _digs[-1]
+            if cand in _discover_keys():
+                return cand
+            return _match_long_name(path_or_comp) or _current_comp
+        return _current_comp or _match_long_name(path_or_comp)
+
+
+def _discover_keys():
+    """当前数据根 discover 的主体 key 集合（有 _CACHE_ENT 缓存，热路径安全）。"""
+    try:
+        return set(discover_entities(_DATA_ROOT or '').keys())
+    except Exception:
+        return set()
+
+
+def _match_long_name(path):
+    """U8 长名主体（XBJ 等）：文件名与 discover key 匹配。
+    优先精确子串（key ⊂ 文件名）；再按【去数字后的 key】在文件名中匹配——
+    XBJ key '01年简阳市...账簿' vs 文件名 '012020年简阳市...账簿2025年科目余额表.xlsx'，
+    前导数字段不同（'01年' 不连续出现于 '012020年'），但去数字后
+    '年简阳市...账簿' 是文件名子串。"""
+    base = os.path.basename(path)
+    try:
+        keys = discover_entities(_DATA_ROOT or '').keys()
+        for k in keys:
+            ks = str(k)
+            if ks and ks in base:
+                return k
+        import re as _re
+        for k in keys:
+            ks = str(k)
+            k_clean = _re.sub(r'\d', '', ks)
+            if k_clean and k_clean in base:
+                return k
+    except Exception:
+        pass
+    return None
 
 
 def tb_entries(comp=None):
@@ -405,6 +446,18 @@ def read_tb_full(data_dir, entities=None, year='2026'):
         tb = _CACHE_TB[key]
     else:
         tb = SR.read_sap_tb(_d, entities, year=year)
+        if not tb:
+            # ⚡⚡ 2026-08-29 XBJ U8 回退：SAP 布局探测 None → read_sap_tb 恒空 →
+            #   read_tb_full 0 主体 → inventory/rd_expense/revenue 在 XBJ group 全 0。
+            #   回退 audit_common 的【原始 U8 版】read_tb_full（能读 XBJ 200 主体），
+            #   必须用 _read_tb_full_orig（patch 后 from-import 会拿到自身 → 递归）。
+            try:
+                import audit_common as _AU
+                _rtb_u8 = getattr(_AU, '_read_tb_full_orig', None) or _AU.read_tb_full
+                # ⚡⚡ 原始 U8 read_tb_full 需 entities（None 会 .items() 抛错）→ 传 discover 主体
+                tb = _rtb_u8(_d, discover_entities(_d))
+            except Exception:
+                tb = {}
         _CACHE_TB[key] = tb
         _build_code2name(tb)
     if entities is not None:
@@ -495,6 +548,16 @@ def read_gl_rows(data_dir, entities=None, year='2026', exclude_co=False):
        strip_padding，1010 全量重跑 17 分钟（用户痛点"每次都死磕 66 万行"）。
        缓存命中后仅浅拷贝列表（行 dict 共享，调用方只读字段）。"""
     _d = _DATA_ROOT or data_dir
+    # ⚡⚡ 2026-08-29 XBJ U8 回退：SAP 布局探测 None（U8 多主体）时 read_gl_rows 的
+    #   SAP 序时账分支恒空（XBJ 无 SAP 缓存）→ inventory/revenue 等 GL 相关全 0。
+    #   直接走 audit_common 原始 U8 版（读综合查询明细表，支持 201 主体）。
+    try:
+        if C.detect_sap_layout(_d) is None:
+            import audit_common as _AU
+            _rgl_u8 = getattr(_AU, '_read_gl_rows_orig', None) or _AU.read_gl_rows
+            return _rgl_u8(_d, entities)
+    except Exception:
+        pass
     ents = entities or discover_entities(_d)
     # ⚡ 2026-08-23 exclude_co 影响结果 → 缓存 key 必须区分，否则两模式互相污染
     _ck = (bool(exclude_co), tuple(sorted((e, str(y)) for e, yd in ents.items() for y in yd)))
@@ -1105,6 +1168,15 @@ def patch_audit_common():
     ⚡ 只替换属性（AU.xxx = ...）；from-import 绑定不受影响（生成器 SAP 分支应直接调
     _adapter 接口或经 audit_common.discover_entities 属性查找）。"""
     import audit_common as AU
+    # ⚡⚡ 2026-08-29 备份原始 U8 版接口（patch 前），供 read_tb_full 的 U8 回退用
+    #   （XBJ 等 U8 账套：SAP read_sap_tb 空 → 回退 U8 通用读取，若 from audit_common
+    #   import 拿到的是 patch 后的自身会递归）。
+    if not getattr(AU, '_read_tb_full_orig', None):
+        AU._read_tb_full_orig = AU.read_tb_full
+    if not getattr(AU, '_read_gl_rows_orig', None):
+        AU._read_gl_rows_orig = AU.read_gl_rows
+    if not getattr(AU, '_read_km_orig', None):
+        AU._read_km_orig = AU.read_km
     AU.discover_entities = discover_entities
     AU.read_tb_full = read_tb_full
     AU.read_gl_rows = read_gl_rows

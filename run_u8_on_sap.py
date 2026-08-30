@@ -600,6 +600,23 @@ def main(argv=None):
     comps = [a for a in argv if not a.startswith('-')] or sorted(A.discover_entities(DATA).keys())
     A.set_root(DATA)
     A.patch_audit_common()
+    # ⚡⚡ 2026-08-30 防误用（曾把集团码 1357 当主体码传入 → current_account 静默 SKIP 0.0s）：
+    #   --only 指定的代码不在 discover 主体集 → 立即告警并剔除，不让静默空结果交付。
+    #   AH 三集团（1010/1357/2468）是集团码非主体码，须走 ah_parallel_run（内部按集团
+    #   拆真实主体列表传 --only），此处命中即提示正确用法。
+    if GROUP_ONLY:
+        try:
+            _dkeys = set(A.discover_entities(DATA).keys())
+            _miss = [c for c in GROUP_ONLY if c not in _dkeys]
+            if _miss:
+                _hit = [c for c in GROUP_ONLY if c in _dkeys]
+                print(f'⚠️ [--only] {len(_miss)} 个非主体代码（可能误用集团码）: {_miss}', flush=True)
+                if not _hit:
+                    print(f'⚠️ [--only] 全部无效 → 无主体可跑，请核对参数。AH 集团请用 ah_parallel_run。', flush=True)
+                GROUP_ONLY = _hit
+                A._GROUP_COMPS = set(GROUP_ONLY)
+        except Exception:
+            pass
     if _out_dir:
         OUT = os.path.abspath(_out_dir)
         print(f'[--out-dir] 输出目录：{OUT}', flush=True)

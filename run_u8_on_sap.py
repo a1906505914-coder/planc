@@ -643,7 +643,10 @@ def main(argv=None):
             if subj_only and name not in subj_only:
                 continue
             # ⚡ 2026-08-29 断点续跑：签名一致且 OK/SKIP/FAILED_PERM 的科目跳过
-            if resume:
+            # ⚡⚡ 2026-08-30 改进（bank 重跑被旧 SKIP 断点拦截的教训）：--subj 明确指定
+            #   某科目时【忽略断点跳过】——用户指定=要重跑（补跑失败/验证修复），
+            #   断点残留（如早期 SKIP）不应阻止。
+            if resume and not subj_only:
                 _rc = _resume.get(name)
                 if _rc and _rc.get('csig') == _csig and _rc.get('dsig') == _dsig:
                     if _rc.get('status') in ('OK', 'SKIP'):

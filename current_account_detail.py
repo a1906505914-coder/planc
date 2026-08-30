@@ -4122,6 +4122,12 @@ def export_combined_excel(output, periods, comb_customers, comb_summary, issues,
     if subj_key == "AR":
         ws = wb.create_sheet("主营客户比")
         _write_revenue_customer_sheet(ws, data_dir, comb_customers, comb_summary, _render_periods, entities_dict, label)
+        # ⚡⚡ 2026-08-30 用户需求：主营客户比差异归因单独 sheet（应收借方 vs 收入的差异按对方科目归类）
+        try:
+            ws = wb.create_sheet("主营客户比差异归因")
+            _write_customer_ratio_diff_sheet(ws, data_dir, _by_ent_data, entities_dict, _render_periods, label)
+        except Exception as _ex:
+            print(f'  ⚠️ 主营客户比差异归因失败：{_ex}')
     # ⚡ 2026-08-11 阶段一 1.2 合并底稿差异化：内部交易抵消核对表（集团模式多主体专属）
     # ⚡⚡ 2026-08-29 用户需求：不再生成——关联交易/关联往来底稿由独立小程序生成（88 家核对底稿）。
     # if len(ent_list) > 1:
@@ -4946,6 +4952,67 @@ def _write_revenue_customer_sheet(ws, data_dir, comb_customers, comb_summary, pe
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
     for i, w in enumerate([22, 26, 28, 18], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def _write_customer_ratio_diff_sheet(ws, data_dir, by_ent_data, entities_dict, periods, label):
+    """主营客户比差异归因：应收账款借方发生额按【对方科目】拆分，解释与主营业务收入(贷方)差异。
+    归因类别：①主营业务收入(正常) ②销项税额(价税分离) ③预收账款互转 ④合同资产/负债互转 ⑤其他。
+    数据源：对方科目核对（sale_cp=应收借方对方科目金额分布，与『主营客户比』同源 GL）。
+    ⚡ 2026-08-30 用户需求：把差异归类结果形成单独 sheet，清楚解释主营客户比差异原因。"""
+    periods = sorted(periods)
+    try:
+        _rev_map, _has_cust, rev_by_ent = _read_revenue_aux(data_dir)
+    except Exception:
+        rev_by_ent = {}
+    _CATS = [
+        ("主营业务收入(正常)", ["主营业务收入", "其他业务收入", "营业收入"]),
+        ("销项税额(价税分离)", ["销项", "销项税额"]),
+        ("预收账款互转", ["预收账款", "预收款"]),
+        ("合同资产/负债互转", ["合同资产", "合同负债", "合同结算"]),
+    ]
+    ws.cell(2, 1, f"{label} — 主营客户比差异归因").font = TITLE_FONT
+    ws.cell(3, 1, "解释『主营客户比』中应收账款借方发生数与主营业务收入(贷方)的差异："
+                  "应收借方按对方科目拆分归因（数据源自对方科目核对，同源 GL）。"
+                  "归因合计应等于应收账款借方发生额；『差异』列 = 应收借方 − 收入。"
+                  ).font = Font(name='Times New Roman', italic=True, size=10, color="808080")
+    hdr = ["核算主体", "主营业务收入", "应收账款借方发生额", "差异(应收借方-收入)"] + \
+          [f"其中：{t}" for t, _ in _CATS] + ["其他(需关注)", "归因合计"]
+    hdr_row = 4
+    for i, h in enumerate(hdr, 1):
+        ws.cell(hdr_row, i, h)
+    _style_header(ws, hdr_row, len(hdr))
+    r = hdr_row + 1
+    ents = sorted(set(rev_by_ent.keys()) | set(k[0] for k in by_ent_data))
+    for E in ents:
+        rev = rev_by_ent.get(E, 0.0)
+        ar = 0.0
+        parts = [0.0] * len(_CATS)
+        other = 0.0
+        for (ent, pk), d in by_ent_data.items():
+            if ent != E:
+                continue
+            for km, amt in (d.get("sale_cp") or {}).items():
+                ar += amt
+                _hit = -1
+                for i, (_t, kws) in enumerate(_CATS):
+                    if any(kw in km for kw in kws):
+                        _hit = i
+                        break
+                if _hit >= 0:
+                    parts[_hit] += amt
+                else:
+                    other += amt
+        _put_cells(ws, r, [E, round(rev, 2), round(ar, 2), round(ar - rev, 2)] +
+                          [round(p, 2) for p in parts] + [round(other, 2), round(sum(parts) + other, 2)],
+                   money_cols=tuple(range(2, len(hdr) + 1)), center_cols=())
+        r += 1
+    _note_row = r + 1
+    ws.cell(_note_row, 1, "注：『其他(需关注)』= 对方科目不属于收入/销项税/预收/合同类（如冲往来、营业外等），"
+                          "需按异常对应科目凭证清单进一步核查。").alignment = LEFT
+    ws.merge_cells(start_row=_note_row, start_column=1, end_row=_note_row, end_column=len(hdr))
+    for i, w in enumerate([14] + [22] * (len(hdr) - 1), 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = f"A{hdr_row + 1}"
 
 
 def _is_sap_mode(data_dir):

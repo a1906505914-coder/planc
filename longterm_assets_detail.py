@@ -156,6 +156,16 @@ GROUPS = {
         'impair_names': [], 'clear_names': [],
         'accum_kw': None, 'amort': False, 'amort_src': None, 'special': True,
     },
+    'ONCA': {
+        # ⚡⚡ 2026-08-30 新增：其他非流动资产（1831 资产购置预付款 等），
+        #   之前无生成器 → 科目无处安放被预付 kw='预付' 误吸收。并入 longterm 程序生成。
+        'title': '其他非流动资产', 'paper': '其他非流动资产审计底稿',
+        'main_sheet': '其他非流动资产分类汇总表',
+        'inc_sheet': '其他非流动资产增加检查表', 'dec_sheet': '其他非流动资产减少检查表',
+        'cost_names': ['其他非流动资产'], 'accum_names': [],
+        'impair_names': [], 'clear_names': [],
+        'accum_kw': None, 'amort': False, 'amort_src': None, 'special': False,
+    },
 }
 
 # 二级分类展示优先顺序（按常见资产类别；其余按名称排序补在后）
@@ -170,6 +180,7 @@ INC_LABELS = {
     'ROU': ['购入', '在建工程转入', '内部转移', '其他'],
     'LTDEF': ['发生', '在建工程转入', '内部转移', '其他'],
     'CIP': ['发生', '在建工程转入', '内部转移', '其他'],
+    'ONCA': ['发生', '在建工程转入', '内部转移', '其他'],
 }
 DEC_LABELS = {
     'FA': ['出售', '内部转移', '转入在建工程', '其他'],
@@ -179,6 +190,7 @@ DEC_LABELS = {
     'LTDEF': ['摊销完毕/转出', '内部转移', '转入在建工程', '其他'],
     'CIP': ['转入固定资产', '转入无形资产', '转入长期待摊费用', '转入投资性房地产',
             '内部转移', '出售', '其他'],
+    'ONCA': ['转出', '内部转移', '转入在建工程', '其他'],
 }
 INC_KEYS = ['purchase', 'inproject', 'internal', 'other']
 DEC_KEYS_DEPR = ['sale', 'internal', 'to_inproject', 'other']
@@ -2724,7 +2736,9 @@ def build_audit_confirm_sheet(wb, year, recs, gkey):
     is_cip = sp.get('special')
     # 铁律：科目名以实际账套为准——动态发现该组实际备抵科目名（如"使用权资产折旧"）
     accum_label = _discover_accum_name(recs, gkey) if not is_cip else None
-    comps = ['原值'] if is_cip else ['原值', accum_label, '减值准备', '净值']
+    # ⚡⚡ 2026-08-30 ONCA 无累计折旧/摊销（accum_names 空）→ accum_label None →
+    #   只列『原值』列（同 is_cip 但走通用 disposal 逻辑，非 CIP 转固）。
+    comps = ['原值'] if (is_cip or not accum_label) else ['原值', accum_label, '减值准备', '净值']
     ncols = 6
     r = _title(ws, '%s（%s 年度）' % (title, year), ncols)
     r = _sub(ws, '期末审定数=期末未审数+审计调整数（审计调整数留空待填）；表末全集团合计。', ncols, r)

@@ -896,9 +896,11 @@ def build_loan_audit_confirm_sheet(wb, tb, ents, years, sk='ST'):
                               for c2 in codes)]
     for e in sorted(by_e):
         recs = by_e[e]
-        # 借款为贷方科目：TB 自然符号借正贷负，abs() 使年初/期末以正数列示（铁律20）
-        qc = sum(abs(v['qc']) for _, _, v in recs)
-        qm = sum(abs(v['qm']) for _, _, v in recs)
+        # 借款为贷方科目：TB 自然符号借正贷负，-v 使贷余（负）→ 贷方余额正、借余（正）→ 负
+        # （铁律20）。⚡⚡ 2026-08-30 修复：原 abs 把借余子目（2480 信用借款 +220.9M 借方余额
+        #   异常）也变正 → Σ|qm|=912.6M vs TB 470.8M。改 -v 与 _tb_detail 344 一致。
+        qc = sum(-v['qc'] for _, _, v in recs)
+        qm = sum(-v['qm'] for _, _, v in recs)
         g_qc += qc; g_qm += qm
         _txt(ws, r, 1, _ent_disp(e))
         _money(ws, r, 2, qc)

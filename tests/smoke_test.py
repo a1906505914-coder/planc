@@ -4,12 +4,13 @@
 覆盖关键读取/映射/脱敏/勾稽函数，防止改公共层破坏。运行：
   python tests/smoke_test.py
 """
-import paths as P
 import os
 import sys
 
 APP = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 sys.path.insert(0, os.path.abspath(APP))
+
+import paths as P   # ⚡ 2026-08-30 修复：必须在 sys.path.insert(APP) 之后 import（原顺序导致 ModuleNotFoundError）
 
 PASS = FAIL = 0
 

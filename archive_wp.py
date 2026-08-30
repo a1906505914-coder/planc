@@ -14,9 +14,10 @@ import sys
 import shutil
 import datetime
 import zipfile
+import paths as P
 
-AH_WP = r'd:/底稿测试/AH/底稿/2026/集团'
-AH_ARCHIVE = r'd:/底稿测试/AH/底稿/2026/_archive'
+AH_WP = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')
+AH_ARCHIVE = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '_archive')
 
 
 def _ts():

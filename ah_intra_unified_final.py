@@ -19,9 +19,10 @@
   VOU2500_PREFIX 期初结转凭证前缀。公司代码映射来自 load_company_map()。
 """
 import os, sys, glob
+import paths as P
 from collections import defaultdict
 
-sys.path.insert(0, r'd:/底稿测试/账套取数审计小程序')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ah_intra_diff_trace as m
 from ah_intra_seq_extract import load_company_map
 
@@ -30,8 +31,8 @@ from openpyxl.styles import Font, PatternFill, Border, Side
 
 # ════════════════════════ 配置区（适配其他集团改这里） ════════════════════════
 CONFIG = dict(
-    SEQ_FP    = r'd:/底稿测试/AH/中间产物/prepared/关联往来序时账_2026.xlsx',  # 抽取结果序时账
-    OUTDIR    = r'd:/底稿测试/AH/中间产物/prepared',                             # 输出目录
+    SEQ_FP    = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared', '关联往来序时账_2026.xlsx'),  # 抽取结果序时账
+    OUTDIR    = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared'),                             # 输出目录
     # 核对期间（None=不限制）。增量核对8-9月时：--start 20260801 --end 20260930
     PERIOD_START = None,
     PERIOD_END   = None,          # 当前全期核对，由核对表期初期末决定
@@ -705,7 +706,7 @@ def build_km_map():
     """科目代码→名称（从 AH 科目余额表目录解析，code 去 HY01/ 前缀）。"""
     import glob
     from sap_reader import parse_sap_tb_name
-    root = r'd:/底稿测试/AH/数据/2026/科目余额表'
+    root = os.path.join(P.DATA_DIRS['AH'], '数据', '2026', '科目余额表')
     out = {}
     for fp in sorted(glob.glob(os.path.join(root, '*.xlsx'))):
         try:

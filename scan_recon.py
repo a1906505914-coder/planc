@@ -5,6 +5,7 @@
 """
 import sys, os, glob, re
 import openpyxl
+import paths as P
 
 def find_end_col(ws, n_hdr=6):
     """在表头行（前 n_hdr 行）找期末列。按优先级匹配：
@@ -86,7 +87,7 @@ def scan_one(path, detail=False):
     return None
 
 def main():
-    d = sys.argv[1] if len(sys.argv) > 1 else r'D:/底稿测试/AH/tmp_1010full'
+    d = sys.argv[1] if len(sys.argv) > 1 else os.path.join(P.DATA_DIRS['AH'], 'tmp_1010full')
     detail = '--detail' in sys.argv
     files = sorted(glob.glob(os.path.join(d, '*审计底稿_*.xlsx')))
     if not files:

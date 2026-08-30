@@ -18,9 +18,10 @@ import glob
 import os
 import sys
 import time
+import paths as P
 
 DEFAULT_MAX_AGE = 1800        # 30 分钟（current_account 大表单科目可能较长）
-DEFAULT_DATA = r'd:/底稿测试/AH/数据/2026'
+DEFAULT_DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
 
 
 def scan(data_root, max_age):

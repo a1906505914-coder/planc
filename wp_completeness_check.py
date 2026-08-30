@@ -25,9 +25,10 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import audit_checker
 import sheet_gap_check
+import paths as P
 
-AH_GROUP_ROOT = r'd:/底稿测试/AH/底稿/2026/集团'
-AH_DATA = r'd:/底稿测试/AH/数据/2026'
+AH_GROUP_ROOT = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')
+AH_DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
 
 # 关键表（决定底稿"是否有内容"）：含这些关键词的 sheet 空=异常
 _KEY_SHEET_KW = ('审定表', '明细表', '附注汇总', '余额表', '台账')

@@ -7,8 +7,9 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import openpyxl, collections
 import sap_adapter as A
+import paths as P
 
-DATA = r'd:/底稿测试/AH/数据/2026'
+DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
 A.set_root(DATA)
 
 def read_list(comp, kind):

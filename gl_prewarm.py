@@ -9,9 +9,10 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import sap_common as C
+import paths as P
 from ah_parallel_run import GROUPS
 
-DATA = r'd:/底稿测试/AH/数据/2026'
+DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
 
 def main():
     comps = [c for g in GROUPS.values() for c in g]

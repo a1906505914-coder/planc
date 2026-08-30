@@ -16,11 +16,12 @@ import os
 import sys
 import subprocess
 import time
+import paths as P
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 PY = os.environ.get('AH_PY', sys.executable)
-DATA = r'd:/底稿测试/AH/数据/2026'
-OUT_ROOT = r'd:/底稿测试/AH/底稿/2026/集团'
+DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
+OUT_ROOT = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')
 
 GROUPS = {
     '1010': ['1010'],

@@ -11,8 +11,9 @@
 """
 import glob, os, re, sys
 import openpyxl
+import paths as P
 
-ROOT = 'd:/底稿测试/AH/底稿/2026/集团'
+ROOT = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')
 GRPS = ['1010', '1357', '2468']
 ROOT_SUFFIX = ''  # 正式目录
 FLAGS = []
@@ -123,7 +124,7 @@ def check_integrity_sheet(g):
 def main():
     print('==== AH 三集团底稿回归检查 ====\n')
     # R5 公司代码 88 家
-    cp = 'D:/底稿测试/AH/中间产物/prepared/公司代码.xlsx'
+    cp = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared', '公司代码.xlsx')
     try:
         wb = openpyxl.load_workbook(cp, read_only=True, data_only=True)
         ws = wb.worksheets[0]

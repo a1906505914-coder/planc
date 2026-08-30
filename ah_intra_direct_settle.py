@@ -8,16 +8,17 @@
 - 1002行原始日期缺失 → 同凭证非空日期回填
 """
 import sys
-sys.path.insert(0, r'd:/底稿测试/账套取数审计小程序')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import os
 import openpyxl
+import paths as P
 from collections import defaultdict, Counter
 from openpyxl.styles import Font, PatternFill, Border, Side
 from ah_intra_seq_extract import load_company_map
 import ah_intra_diff_trace as m
 
-DEFAULT_SEQ = r'd:/底稿测试/AH/中间产物/prepared/关联往来序时账_2026.xlsx'
-DEFAULT_OUTDIR = r'd:/底稿测试/AH/中间产物/prepared/_过程稿/重建_20260821'
+DEFAULT_SEQ = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared', '关联往来序时账_2026.xlsx')
+DEFAULT_OUTDIR = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared', '_过程稿', '重建_20260821')
 
 RECV_PAY = ('1122', '1124', '2203', '2202', '1123', '1221', '2241')
 EXCLUDE_KM = ('1301', '1121')  # 委贷、应收票据

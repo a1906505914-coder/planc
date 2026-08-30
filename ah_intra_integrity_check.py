@@ -24,16 +24,17 @@ import sys
 import glob
 import argparse
 from collections import defaultdict, Counter
+import paths as P
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, APP_DIR)
 import openpyxl  # noqa: E402
 
-PREP = r'd:/底稿测试/AH/中间产物/prepared'
+PREP = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared')
 SEQ_FP = os.path.join(PREP, '关联往来序时账_2026.xlsx')
 PAIR_FP = os.path.join(PREP, '88家内部往来核对_2026.xlsx')
 CHECK_FP = os.path.join(PREP, '关联往来勾稽校验_2026.xlsx')
-TB_DIR = r'd:/底稿测试/AH/数据/2026/科目余额表'
+TB_DIR = os.path.join(P.DATA_DIRS['AH'], '数据', '2026', '科目余额表')
 
 # 往来科目（与 ah_intra_group_recon.SUBJS 前 6 位一致）
 RECV_KMS = ('1122', '1123', '1221', '2202', '2203', '2241')
@@ -93,7 +94,7 @@ def check_gl_vs_tb(threshold=1_000_000):
     用净额(借-贷)对比（资金池类科目大进大出，发生额口径天然不具可比性）。"""
     # TB 汇总（三集团）
     import sap_reader
-    tb = sap_reader.read_sap_tb(r'd:/底稿测试/AH/数据/2026', ['1010', '1357', '2468'], '2026')
+    tb = sap_reader.read_sap_tb(os.path.join(P.DATA_DIRS['AH'], '数据', '2026'), ['1010', '1357', '2468'], '2026')
     tb_net = defaultdict(float)
     for (e, c, n, y), v in tb.items():
         p = str(c)[:4]

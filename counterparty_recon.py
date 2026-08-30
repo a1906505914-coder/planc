@@ -20,10 +20,11 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 import sap_adapter
+import paths as P
 
-DATA = r'D:/底稿测试/AH/数据/2026'
-OUT_ROOT = r'D:/底稿测试/AH/中间产物/counterparty_recon'
-ROOT = r'D:/底稿测试/AH/底稿/2026/集团'   # 正式底稿目录（inject 用）
+DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
+OUT_ROOT = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'counterparty_recon')
+ROOT = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')   # 正式底稿目录（inject 用）
 GROUPS = {
     '1010': ['1010'],
     '1357': ['1020', '1030', '1040', '1050', '1060', '1070', '1080', '1090', '1100',

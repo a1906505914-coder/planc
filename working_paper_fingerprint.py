@@ -20,8 +20,9 @@ v2 变更：基线存 JSONL（每行=一个文件条目），base 逐文件写�
 """
 import os, sys, glob, json, time, hashlib
 import openpyxl
+import paths as P
 
-ROOT = r'D:/底稿测试/AH/底稿/2026/集团'
+ROOT = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')
 GRPS = ['1010', '1357', '2468']
 BASE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_wp_fingerprint_base.jsonl')
 

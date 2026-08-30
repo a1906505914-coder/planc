@@ -17,8 +17,9 @@ import sys
 import glob
 import argparse
 import openpyxl
+import paths as P
 
-DEFAULT_WP = r'd:/底稿测试/AH/底稿/2026/集团/1010'
+DEFAULT_WP = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团', '1010')
 
 
 def _num(v):
@@ -100,7 +101,7 @@ def main():
     a = ap.parse_args()
 
     if a.all:
-        roots = glob.glob(r'd:/底稿测试/AH/底稿/2026/集团/*')
+        roots = glob.glob(os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团', '*'))
     else:
         roots = [a.wp_dir]
     files = []

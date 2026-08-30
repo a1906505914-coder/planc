@@ -14,11 +14,12 @@ import os
 import sys
 import time
 import subprocess
+import paths as P
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 PY = os.environ.get('AH_PY', sys.executable)
-AH_DATA = r'd:/底稿测试/AH/数据/2026'
-AH_OUT = r'd:/底稿测试/AH/底稿/2026/集团'
+AH_DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
+AH_OUT = os.path.join(P.DATA_DIRS['AH'], '底稿', '2026', '集团')
 
 
 def _run(cmd):

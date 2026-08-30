@@ -30,7 +30,15 @@ def _aggregate_bs(tb_full, entities, eff_years, codes, names, is_credit, keep_si
                 #   且繁简不一致（123101'应收帐款'帐≠账 不命中、123102'应收账款'命中）→ 只扣 592万。
                 #   坏账准备由坏账准备 sheet 单独列示，审定表必须取原值（与 openpyxl _amt_raw 跳过
                 #   1231/1471/1602/1703 备抵码一致）。
-                if ('坏账' in str(n)) or ('坏帐' in str(n)) or str(c).startswith(('1231', '1471', '1602', '1703')):
+                # ⚡⚡ 2026-08-30 修复②：同类从属科目误吸收——
+                #   · '递延所得税资产-合同资产减值准备'(1811) 被合同资产误算入（1050 差 628K）
+                #   · '其他应付账款-其他应付账款调整'(2241) 被应付账款误算入（1100 差 40K）
+                #   排除：名称含 递延所得税/跌价，或 code 1811/2901（递延所得税），或
+                #   名称以『其他』开头但非本组（其他应收/其他应付属独立组）。
+                _nm = str(n)
+                if ('坏账' in _nm) or ('坏帐' in _nm) or ('递延所得税' in _nm) or ('跌价' in _nm) \
+                        or str(c).startswith(('1231', '1471', '1602', '1703', '1811', '2901')) \
+                        or (_nm.startswith('其他') and not any(nm and _nm.startswith(nm) for nm in names)):
                     continue
             elif codes:
                 if not any(str(c).startswith(p) for p in codes):

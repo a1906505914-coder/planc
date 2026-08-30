@@ -1877,17 +1877,19 @@ def build_revenue_audit_sheet(wb, entities, tb_all, cur_y, prev_y):
     # 从 TB 汇总（cur_y=本期、prev_y=上年对比，均由调用方传入）
 
     def _tb(ent, y, role):
-        """从 TB 取数：rev→credit, cost→debit, other_rev→credit, other_cost→debit"""
+        """从 TB 取数：rev→credit, cost→debit, other_rev→credit, other_cost→debit。
+        ⚡⚡ 2026-08-30 用户决策"与 TB 一致"：收入/成本改【净额】口径（贷-借/借-贷），
+        与自建试算表期末余额对齐（原 gross 贷方总额 vs 试算表净额 → 营业收入 62.7亿 vs 32.6亿差异）。"""
         tb = tb_all.get(ent, {}).get(y, {})
         cd = _detect_codes(tb)
         if role == 'rev':
-            return _tb_total(tb, 'rev', 'cr')
+            return _tb_total(tb, 'rev', 'cr') - _tb_total(tb, 'rev', 'db')
         elif role == 'cost':
-            return _tb_total(tb, 'cost', 'db')
+            return _tb_total(tb, 'cost', 'db') - _tb_total(tb, 'cost', 'cr')
         elif role == 'orev':
-            return _tb_total(tb, 'orev', 'cr') if cd.get('orev') else 0.0
+            return (_tb_total(tb, 'orev', 'cr') - _tb_total(tb, 'orev', 'db')) if cd.get('orev') else 0.0
         elif role == 'ocost':
-            return _tb_total(tb, 'ocost', 'db') if cd.get('ocost') else 0.0
+            return (_tb_total(tb, 'ocost', 'db') - _tb_total(tb, 'ocost', 'cr')) if cd.get('ocost') else 0.0
         return 0.0
 
     # 行定义：(label, role, is_minus, is_profit)

@@ -206,8 +206,10 @@ def build_sap_tb(data_dir, out_path=None, year='2026', comps=None):
     for rn, kws in PL_ROWS:
         _txt(ws3, r, 1, rn)
         tot = 0.0
+        # ⚡⚡ 2026-08-30 修复：收益类科目取贷方 df（原仅营业收入取 df，投资收益等
+        #   错取借方 jf → 334M 显示 1.96M，利润表投资收益严重失真）。
+        is_income = rn in ('营业收入', '其他收益', '投资收益', '营业外收入')
         for j, c in enumerate(comps, 2):
-            is_income = rn in ('营业收入',)
             v = sum((a['df'] if is_income else a['jf']) for l1, a in ent_l1[c].items()
                     if any(k in l1 for k in kws))
             _money(ws3, r, j, v)

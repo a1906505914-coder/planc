@@ -185,6 +185,26 @@ def check_concurrency(data_root):
         _add('OK', '无同账套并发进程')
 
 
+def check_run_lock(data_root):
+    """同数据包并发锁（2026-08-30 多用户化，跨机器）：
+    数据目录存在他人持有的 .audit.lock（未过期）→ BLOCK 阻断，
+    避免共享盘上两人同时全量跑同一账套互踩输出。"""
+    try:
+        from audit_lock import check_run_lock as _chk, DEFAULT_TTL
+    except Exception:
+        return
+    occupied, info = _chk(data_root, DEFAULT_TTL)
+    if occupied:
+        parts = (info or '').split(':')
+        host = parts[0] if parts else '?'
+        _add('BLOCK', f'同数据包被占用：{host} 正在处理该账套（锁 {LOCK_HINT}，30 分钟内残留可手动删除）')
+    else:
+        _add('OK', '同数据包无并发锁')
+
+
+LOCK_HINT = '.audit.lock'
+
+
 def check_prior_logs(data_root):
     """上次运行看门狗报警残留。"""
     marks = glob.glob(os.path.join(data_root, '*.ALERT')) + glob.glob(os.path.join(data_root, '*.DEAD'))
@@ -238,6 +258,7 @@ def main(argv=None):
     check_cache(data_root)
     check_disk()
     check_concurrency(data_root)
+    check_run_lock(data_root)
     check_prior_logs(data_root)
     if '--skip-hardcode' not in argv:
         check_hardcode()

@@ -158,6 +158,16 @@ def main():
         print("\n" + "=" * 70)
         print("文件夹 %s (%s)" % (d, data_dir))
         print("=" * 70)
+        # ⚡⚡ 2026-08-30 多用户化：同数据包并发锁（跨机器共享盘，锁根=数据目录）。
+        _lock_token = None
+        try:
+            from audit_lock import acquire_run_lock, release_run_lock
+            _lock_token = acquire_run_lock(data_dir)
+            if _lock_token is None:
+                print('  ⛔ 同数据包被其他机器占用（.audit.lock），跳过 %s。确认无人运行后删除锁文件或等其超时（30 分钟）。' % d, flush=True)
+                continue
+        except Exception:
+            _lock_token = None
         # ⚡⚡ 2026-08-24 架构预检：科目代码归属冲突检测（防『修了又犯』——配置盲区提前暴露）
         try:
             import code_conflict_check as _ccc
@@ -188,6 +198,11 @@ def main():
             except tb_validate.TBValidationError as _ex:
                 print(f'  ⛔ [阶段三 3.2] {_ex}')
                 print(f'  [跳过] {d}：TB 控制数不平衡（Fail Fast），修复数据后重跑')
+                try:
+                    if _lock_token:
+                        release_run_lock(data_dir, _lock_token)
+                except Exception:
+                    pass
                 continue
             except Exception as _ex:
                 print(f'  ⚠️ TB 校验异常（继续）：{_ex}')
@@ -234,6 +249,12 @@ def main():
                 print(f"\n----- [{_label}] {_mod} 未实现，跳过 -----")
             except Exception as _ex:
                 print(f"  ⚠️ [{_label}] 执行异常：{_ex}")
+        # ⚡ 2026-08-30 多用户化：释放同数据包锁（异常路径由 TTL 30 分钟兜底）
+        try:
+            if _lock_token:
+                release_run_lock(data_dir, _lock_token)
+        except Exception:
+            pass
 
 
 def _run_builders(data_dir, skip_finalize):

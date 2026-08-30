@@ -29,11 +29,22 @@ def stable_md5(*parts):
 
 
 # ---------------- GL 磁盘缓存 key ----------------
+def gl_cache_dir(data_dir):
+    """GL 磁盘缓存目录（2026-08-30 多用户隔离）：
+    env AUDIT_GL_CACHE_DIR 设置时 → <AUDIT_GL_CACHE_DIR>/<data_dir 哈希>
+    （各机本地缓存，避免多人共享数据目录时并发写 .gl_cache 损坏、以及共享盘 I/O 慢）；
+    不设则保持 <data_dir>/.gl_cache（单机现状不变）。"""
+    root = os.environ.get('AUDIT_GL_CACHE_DIR', '')
+    if root:
+        return os.path.join(root, stable_md5(os.path.normpath(data_dir)))
+    return os.path.join(data_dir, '.gl_cache')
+
+
 def gl_cache_key(data_dir, comp, cols, ver=CACHE_VERSION):
     """GL 缓存文件名 key：{comp}_{ver}_{md5(cols)}.pklz。
     历史：hash() 随机化（不同进程 key 不同→永远 miss→OOM 重扫）、无版本（格式变化误用旧缓存）。"""
     h = stable_md5(str(sorted(cols)))
-    return os.path.join(data_dir, '.gl_cache', f'{comp}_{ver}_{h}.pklz')
+    return os.path.join(gl_cache_dir(data_dir), f'{comp}_{ver}_{h}.pklz')
 
 
 def gl_cache_sig_key(cache_key):

@@ -11,7 +11,11 @@ import os
 import hashlib
 import pickle
 
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cache')
+CACHE_DIR = os.environ.get(
+    'AUDIT_CACHE_DIR',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cache'))
+# ⚡ 2026-08-30 多用户隔离：env AUDIT_CACHE_DIR 可指向各机本地缓存目录，
+#   避免多人共享同一程序目录时并发写 .cache/*.pkl 损坏；不设则保持现状。
 KEEP_MAX = 30
 
 

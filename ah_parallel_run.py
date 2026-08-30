@@ -62,6 +62,14 @@ def main():
         except Exception:
             jobs = 3
     t0 = time.time()
+    # ⚡⚡ 2026-08-30 多用户化：同数据包并发锁（跨机器共享盘，锁根=AH 账套根）。
+    #   获取失败 → BLOCK 退出；跑完 release，异常由 TTL(30分钟) 兜底。
+    from audit_lock import acquire_run_lock, release_run_lock
+    lock_root = DATA   # 锁根统一 = 数据目录（与 run_all/preflight 同口径）
+    token = acquire_run_lock(lock_root)
+    if token is None:
+        print('⛔ 同数据包被其他机器占用（.audit.lock），本次不启动。确认无人运行后删除锁文件，或等待其超时（30 分钟）。', flush=True)
+        return 2
     procs = []
     tmp_dir = os.path.join(os.path.expanduser('~'), 'WorkBuddy', '2026-07-15-15-26-19', 'tmp')
     os.makedirs(tmp_dir, exist_ok=True)
@@ -87,6 +95,8 @@ def main():
         log.close()
         print(f'[完成] 集团 {g}: exit={rc}', flush=True)
     print(f'\n全部完成，总耗时 {time.time() - t0:.1f}s（{time.time() - t0:.0f} 秒）', flush=True)
+    release_run_lock(lock_root, token)
+    return 0
 
 
 if __name__ == '__main__':

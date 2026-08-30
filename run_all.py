@@ -45,6 +45,7 @@ def main():
     no_resume = '--no-resume' in argv
     if no_resume:
         argv.remove('--no-resume')
+    target = argv[0]   # ⚡ 2026-08-30 提前定义（原在 t0 后才赋值，但 preflight 已使用 → 变量未定义 bug）
     # ⚡ 2026-08-29 preflight 接入：跑前自动自检（磁盘空间/Excel占用/并发/数据完整性），
     #   BLOCK(2)=阻断停止、WARN(1)=警告继续；--skip-preflight 跳过。
     if '--skip-preflight' in argv:
@@ -58,6 +59,14 @@ def main():
             return 2
         if _pf_rc == 1:
             print('⚠️ 运行前自检有警告，继续运行（可用 --skip-preflight 跳过自检）…', flush=True)
+    # ⚡⚡ 2026-08-30 多用户化：同数据包并发锁（跨机器共享盘）。
+    #   获取失败（他人持有未过期锁）→ BLOCK 退出；跑完 release，异常由 TTL(30分钟) 兜底。
+    from audit_lock import acquire_run_lock, release_run_lock
+    lock_root = AH_DATA if target == 'ah' else os.path.abspath(target)
+    token = acquire_run_lock(lock_root)
+    if token is None:
+        print('⛔ 同数据包被其他机器占用（.audit.lock），本次不启动。确认无人运行后删除锁文件，或等待其超时（30 分钟）。', flush=True)
+        return 2
     t0 = time.time()
     target = argv[0]
     rc = 0
@@ -107,6 +116,7 @@ def main():
     except Exception as _ex:
         print(f'  ⚠️ 完整性检查失败: {_ex}')
     print(f'\n一键全套完成：exit={rc}；指纹回归 {"⚠️ 有差异需检查" if cp.returncode else "✅ 无意外回退"}；完整性报告已生成（耗时 {time.time()-t0:.0f}s）')
+    release_run_lock(lock_root, token)
     return rc or cp.returncode
 
 

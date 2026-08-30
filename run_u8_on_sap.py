@@ -64,26 +64,18 @@ def _comp_of(comp):
 
 
 def _patch_local_readers(mod):
-    """把生成器模块的本地读取引用替换为 adapter 版（SAP 场景）。
-    生成器大多 `from audit_common import read_km as _read_km, read_gl as _read_gl`，
+    """把生成器模块的本地读取引用替换为 backend 注入版（形态分发 DAO 单点）。
+    2026-08-30 批次B：逻辑内聚到 ledger_backend.install_backend_readers（get_backend
+    判定形态；SAP 系注入 sap_adapter 读取器 + _adapter，U8 无需注入），本函数仅转发。
+    历史背景：生成器大多 `from audit_common import read_km as _read_km, read_gl as _read_gl`，
     内部聚合基于这两个函数 → patch 模块属性即覆盖（inventory 的 _read_km_cached 等包装自动生效）。
     ⚡ 2026-08-11 P0 修复：补设 mod._adapter = A —— 生成器 SAP 分支普遍判断
     `_adapter is not None and _adapter.is_sap(...)`（如 bank.read_gl_bank / revenue._aggregate /
     expense._read_gl_sap 等），但模块级 _adapter 恒为 None（只有 main() 才 import sap_adapter），
     导致 SAP 场景（单主体+集团）永远走 U8 分支读 list → 银行对方科目核对/销售采购/剩余核对、
     收入分月/分析性程序等全空。统一注入后 SAP 分支才真正生效。"""
-    if hasattr(mod, '_read_km'):
-        setattr(mod, '_read_km', A.read_km)
-    if hasattr(mod, 'read_km') and not hasattr(mod, '_read_km'):
-        setattr(mod, 'read_km', A.read_km)
-    if hasattr(mod, '_read_gl'):
-        setattr(mod, '_read_gl', A.read_gl)
-    if hasattr(mod, 'read_gl') and not hasattr(mod, '_read_gl'):
-        setattr(mod, 'read_gl', A.read_gl)
-    if hasattr(mod, '_adapter'):
-        setattr(mod, '_adapter', A)
-    if hasattr(mod, 'adapter') and not hasattr(mod, '_adapter'):
-        setattr(mod, 'adapter', A)
+    from ledger_backend import install_backend_readers
+    return install_backend_readers(mod, DATA)
 
 
 def _move_out(comp):

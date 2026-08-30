@@ -433,50 +433,21 @@ _GL_CACHE = {}
 
 
 def _sap_gl_rows():
-    """⚡ 2026-08-10 SAP GL 行统一转换：adapter 行 {name,date,vtype,vno,cp,sm,dr,cr,month,y}
-    → U8 同构 {name,date,voucher,cp,sm,debit,credit,month}（inventory 下游全部用
-    debit/credit/name/date/cp，SAP 行缺 debit/credit/voucher 会 KeyError/取数落空）。
-    ⚡ 2026-08-12 修复：集团模式（current_comp=None）无参 read_gl() 返回空 → 生产成本
-    成本分析表/按主体分月集团版全 0（质检 ERROR）。集团模式逐主体读聚合（防 OOM）。"""
-    _cc = _adapter.current_comp()
-    if not _cc:
-        out = []
-        _root = getattr(_adapter, '_DATA_ROOT', None)
-        _ents_all = _adapter.discover_entities(_root) if _root else {}
-        for _c in sorted(_ents_all):
-            try:
-                _rows_c = _adapter.read_gl_rows(_root, {_c: _ents_all[_c]})
-            except Exception:
-                continue
-            out.extend(_conv_sap_gl(_rows_c))
-        return out
-    return _conv_sap_gl(_adapter.read_gl())
+    """⚡ 2026-08-30 批次B DAO 收尾：统一逐行读取委托 ledger_backend.read_gl_rows
+    （SAP 逐行 + _conv_sap_gl_std 行规范化已内聚 DAO，本函数仅转发，不再自己实现
+    adapter 直读/转换；集团模式逐主体聚合防 OOM 也在 DAO 内）。
+    历史背景：2026-08-10 SAP GL 行统一转换（adapter 行 {name,date,vtype,vno,cp,sm,dr,cr,month,y}
+    → U8 同构 {name,date,voucher,cp,sm,debit,credit,month}）；2026-08-12 集团模式
+    （current_comp=None）无参 read_gl() 返回空 → 逐主体读聚合。"""
+    from ledger_backend import read_gl_rows as _bk_rows
+    return _bk_rows(getattr(_adapter, '_DATA_ROOT', None))
 
 
 def _conv_sap_gl(rows):
-    """adapter 行 → U8 同构行（_sap_gl_rows 的行转换主体，单主体/集团共用）。"""
-    out = []
-    for _r in rows:
-        _vt = str(_r.get('vtype') or '')
-        _no = str(_r.get('vno') or '')
-        _vk = ('%s-%s' % (_vt, _no)).strip('-') or _no
-        out.append({'name': str(_r.get('name') or ''),
-                    'code': str(_r.get('code') or ''),   # 内部码（按指令号聚合科目过滤用）
-                    'date': str(_r.get('date') or ''),
-                    'voucher': _vk,
-                    'cp': str(_r.get('cp') or ''),
-                    'sm': str(_r.get('sm') or ''),
-                    'debit': float(_r.get('debit') if _r.get('debit') is not None else (_r.get('dr') or 0.0)),
-                    'credit': float(_r.get('credit') if _r.get('credit') is not None else (_r.get('cr') or 0.0)),
-                    'month': _r.get('month'),
-                    # ⚡ 2026-08-10 指令号透传（adapter read_gl 已带 wbs/ord/mat/proj/po）：
-                    #   按指令号（WBS/订单）全年增减变动表数据源
-                    'wbs': str(_r.get('wbs') or '').strip(),
-                    'ord': str(_r.get('ord') or '').strip(),
-                    'mat': str(_r.get('mat') or '').strip(),
-                    'proj': str(_r.get('proj') or '').strip(),
-                    'po': str(_r.get('po') or '').strip()})
-    return out
+    """adapter 行 → U8 同构行（2026-08-30 批次B：实现已内聚 ledger_backend._conv_sap_gl_std，
+    本函数保留为兼容别名，调用点零改动）。"""
+    from ledger_backend import _conv_sap_gl_std
+    return _conv_sap_gl_std(rows)
 
 
 def _read_gl_cached(path):

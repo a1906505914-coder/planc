@@ -74,6 +74,10 @@ except Exception:  # pragma: no cover - audit_shell 缺失时降级，保证不�
 # ===================== 数值助手 =====================
 def safe(x):
     """转 float，失败返回 0.0（脏数据/空值/文本兼容）。"""
+    if isinstance(x, str):
+        # ⚡⚡ 2026-08-31 千分位逗号（XBJ U8 导出金额 "1,078"）：原 float('1,078') 抛错 → 0
+        #   → XBJ 损益审定表 jf/df 解析 0 空壳根因之一。
+        x = x.replace(',', '').strip()
     try:
         return float(x)
     except Exception:
@@ -1278,6 +1282,15 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
         2026-08-07 v2：codes 前缀匹配（JTt 等 U8 账套损益科目为 6 位码，配置 codes=['6121']
         是 4 位一级前缀）——前缀命中行再按"父=子和"只取末级叶子，防父+子双计。"""
         tot = 0.0
+        # ⚡⚡ 2026-08-31 修复（XBJ 损益审定表空壳根因②）：损益科目(income_statement)取【发生额】
+        #   ——费用=借方 jf、收益=贷方 df（与 sap_tb_gen 利润表/自建试算表同口径）。原取净额
+        #   (jf-df/df-jf)：XBJ U8 科目余额表损益科目借贷同额(660246 借=贷=-2854517) → 净额 0
+        #   → 审定表空壳而试算表 371M。非损益科目维持净额（资产/负债余额口径）。
+        _income_stmt = bool(item.get('income_statement'))
+        def _pl_amt(_v, _is_credit):
+            if _income_stmt:
+                return _v['df'] if _is_credit else _v['jf']
+            return (_v['df'] - _v['jf']) if _is_credit else (_v['jf'] - _v['df'])
         name_fallback = item.get('subj_name') or (item.get('title') or '').replace(' 审定表', '')
         _hit_set = None
         if codes:
@@ -1291,16 +1304,16 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
             if for_entity is not None and e != for_entity:
                 continue
             if code is not None and str(c) == str(code):
-                tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
+                tot += _pl_amt(v, is_credit)
                 continue
             if codes is not None:
                 if any(str(c).startswith(p) for p in codes):
                     if _hit_set and any(str(c) != cc2 and cc2.startswith(str(c)) for cc2 in _hit_set):
                         continue  # 父级行（有后代同族行）→ 只计末级叶子
-                    tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
+                    tot += _pl_amt(v, is_credit)
                     continue
                 if str(c) in codes:
-                    tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
+                    tot += _pl_amt(v, is_credit)
                     continue
             # 名称兜底：仅当 编码未命中 且 名称匹配 时计入（避免双计）
             # ⚡⚡ 2026-08-27 P0 修复：原 `str(n) == name_fallback` 精确相等，而 SAP 科目名
@@ -1312,7 +1325,7 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
                     or str(n).startswith(name_fallback + '-')
                     or str(n).startswith(name_fallback + '　')
                     or ('-' not in str(n) and name_fallback in str(n))):
-                tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
+                tot += _pl_amt(v, is_credit)
         return tot
 
     ws = wb.create_sheet(title=title)
@@ -1563,7 +1576,7 @@ def add_audit_summary_sheets(wb, data_dir, items, tb_full=None, entities=None, F
                         #   收入）被虚增（1357 1220 主体 jf=1.077亿 vs 净额 682万，审定表合计
                         #   1.282亿 vs 明细表 978万，差 1.18亿）。与明细表（净额/qm）口径一致：
                         #   收入类=df-jf（净贷方），费用类=jf-df（净借方）。
-                        tot += (v['df'] - v['jf'] if is_credit else v['jf'] - v['df'])
+                        tot += _pl_amt(v, is_credit)
                     return tot
 
                 # ---- 按核算主体列示（by_entity） ----

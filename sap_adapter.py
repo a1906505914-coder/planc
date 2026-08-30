@@ -398,7 +398,10 @@ def discover_entities(data_dir):
             #   结构转适配层 {code: {year: {km, gl, aux}}}。
             out = {}
             try:
-                from audit_common import discover_entities as _de_u8
+                import audit_common as _AU
+                # ⚡⚡ 2026-08-31 修复：patch 后 audit_common.discover_entities = 自身 →
+                #   递归空。必须用备份的原始 U8 版（_discover_entities_orig）。
+                _de_u8 = getattr(_AU, '_discover_entities_orig', None) or _AU.discover_entities
                 _u8 = _de_u8(_d)
                 for _c, _yd in _u8.items():
                     for _yy, _bun in _yd.items():
@@ -1177,6 +1180,11 @@ def patch_audit_common():
         AU._read_gl_rows_orig = AU.read_gl_rows
     if not getattr(AU, '_read_km_orig', None):
         AU._read_km_orig = AU.read_km
+    # ⚡⚡ 2026-08-31 修复：discover_entities 的 U8 回退（394 行 `from audit_common import
+    #   discover_entities`）在 patch 后拿到的是【自身 sap_adapter.discover_entities】→ 递归 → 空
+    #   → XBJ 损益类审定表全空壳根因。需备份原始 U8 版供回退。
+    if not getattr(AU, '_discover_entities_orig', None):
+        AU._discover_entities_orig = AU.discover_entities
     AU.discover_entities = discover_entities
     AU.read_tb_full = read_tb_full
     AU.read_gl_rows = read_gl_rows

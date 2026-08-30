@@ -68,7 +68,15 @@ def norm_l1(name):
     供自建试算表生成（sap_tb_gen._l1）与各生成器 TB 取数共用，保证同源。"""
     if not name:
         return name
-    l1 = _L1_SEP.split(str(name))[0].strip()
+    nm = str(name)
+    # ⚡⚡ 2026-08-30 修复：投资性房地产-累计折旧/累计摊销/减值准备 应独立一级
+    #   （与固定资产 1602『累计折旧』独立一致），而非并入『投资性房地产』——
+    #   否则 Sheet1 投资性房地产=净值(原值-折旧 131.9M) vs 底稿原值(185.6M) 差异 54M。
+    if '投资性房地产' in nm and ('累计折旧' in nm or '累计摊销' in nm):
+        return '投资性房地产累计折旧'
+    if '投资性房地产' in nm and '减值准备' in nm:
+        return '投资性房地产减值准备'
+    l1 = _L1_SEP.split(nm)[0].strip()
     return _L1_MAP.get(l1, l1)
 
 

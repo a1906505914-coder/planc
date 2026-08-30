@@ -7,15 +7,16 @@
 用法:
   python contract_anomaly.py [识别文本目录] [输出报告路径]
 """
+import paths as P
 import os
 import re
 import sys
 import glob
 
 OCR_DIR = sys.argv[1] if len(sys.argv) > 1 else \
-    r'd:/底稿测试/ADF/数据/2026/借款合同_ocr/识别文本_脱敏'
+    os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本_脱敏')
 OUT_PATH = sys.argv[2] if len(sys.argv) > 2 else \
-    r'd:/底稿测试/ADF/数据/2026/借款合同_异常条款清单.md'
+    os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_异常条款清单.md')
 
 # —— 异常/非格式条款关键词（按关注度分组）——
 KEYWORDS = [

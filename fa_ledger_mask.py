@@ -20,6 +20,7 @@
   python fa_ledger_mask.py            # 生成脱敏版 + 残留校验
   python fa_ledger_mask.py --dry      # 只打印列级替换统计（不写文件）
 """
+import paths as P
 import glob
 import os
 import re
@@ -28,7 +29,7 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA = r'd:/底稿测试/ADF/数据/2026'
+DATA = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026')
 END_FP = os.path.join(DATA, '7月固定资产台账.xlsx')
 BEG_DIR = os.path.join(DATA, '12月固定资产台账', '12月资产台账')
 OUT_END = os.path.join(DATA, '7月固定资产台账_脱敏.xlsx')

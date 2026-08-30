@@ -8,11 +8,12 @@
       ②客户行项目/供应商行项目（兜底，仅当科目余额表缺某主体时补名）
 输出：D:/底稿测试/AH/中间产物/prepared/公司代码.xlsx（sheet 公司代码，格式 |代码|名称>）
 """
+import paths as P
 import openpyxl, glob, os, re
 from collections import Counter
 
-DATA = r'D:/底稿测试/AH/数据/2026'
-PREP = r'D:/底稿测试/AH/中间产物/prepared'
+DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
+PREP = os.path.join(P.DATA_DIRS['AH'], '中间产物', 'prepared')
 GROUPS = ['1010', '1357', '2468']
 # 三集团 88 家权威主体清单（与 ah_parallel_run.py 一致，作为输出筛选基准）
 GROUP_COMPS = {

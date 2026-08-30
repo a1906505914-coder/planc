@@ -19,6 +19,7 @@
   python confirm_mask_local.py [回函根目录]
   默认：AZ 回函根 = D:\\底稿测试\\AZ\\数据\\2025\\回函
 """
+import paths as P
 import json
 import os
 import re
@@ -216,7 +217,7 @@ def _copy_tree_masked(src, dst, mapping, auditee_codes, report):
 
 
 def main(root=None):
-    root = root or r'D:\底稿测试\AZ\数据\2025\回函'
+    root = root or os.path.join(P.DATA_DIRS['AZ'], '数据', '2025', '回函')
     if not os.path.isdir(root):
         print(f'❌ 回函根目录不存在: {root}')
         return 1

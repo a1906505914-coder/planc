@@ -14,6 +14,7 @@
   _mask_bank / _mask_guarantor                    银行/担保 脱敏
   _FIN_LOANS_CACHE / _load_finance_loans          贷款类逐笔（ST/LT）
 """
+import paths as P
 import json
 import os
 import re
@@ -151,7 +152,7 @@ def _load_finance_loans(sk='ST'):
     global _FIN_LOANS_CACHE
     if _FIN_LOANS_CACHE is not None:
         return [x for x in _FIN_LOANS_CACHE if x['sk'] == sk]
-    base = os.path.join(_FIN_DATA_ROOT or r'd:/底稿测试/ADF/数据/2026', '融资明细')
+    base = os.path.join(_FIN_DATA_ROOT or os.path.join(P.DATA_DIRS['ADF'], '数据', '2026'), '融资明细')
     src = None
     try:
         fp_mask = base + '_脱敏.xlsx'

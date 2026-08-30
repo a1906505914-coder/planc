@@ -13,6 +13,7 @@
 用法：
   python contract_mask_local.py [识别文本目录] [脱敏版输出目录]
 """
+import paths as P
 import json
 import os
 import re
@@ -82,8 +83,8 @@ def mask_path(rel):
 
 
 def main(src=None, dst=None):
-    src = src or r'D:\底稿测试\ADF\数据\2026\借款合同_ocr\识别文本'
-    dst = dst or r'D:\底稿测试\ADF\数据\2026\借款合同_ocr\识别文本_脱敏'
+    src = src or os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本')
+    dst = dst or os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本_脱敏')
     if not os.path.isdir(src):
         print(f'❌ 识别文本目录不存在: {src}')
         return 1

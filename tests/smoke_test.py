@@ -4,6 +4,7 @@
 覆盖关键读取/映射/脱敏/勾稽函数，防止改公共层破坏。运行：
   python tests/smoke_test.py
 """
+import paths as P
 import os
 import sys
 
@@ -26,15 +27,15 @@ def check(name, cond, extra=''):
 def t_mask_safe():
     from mask_safe import _paired_mask, prefer_masked, require_masked
     # 同目录 _脱敏
-    p = _paired_mask(r'D:/底稿测试/ADF/数据/2026', '融资明细.xls')
+    p = _paired_mask(os.path.join(P.DATA_DIRS['ADF'], '数据', '2026'), '融资明细.xls')
     check('mask_safe 同目录配对', p and p.endswith('融资明细_脱敏.xlsx'), p)
     # 同级 _脱敏 子目录（12月资产台账）
-    p2 = _paired_mask(r'D:/底稿测试/ADF/数据/2026/12月固定资产台账/12月资产台账', '3100.XLSX')
+    p2 = _paired_mask(os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '12月固定资产台账', '12月资产台账'), '3100.XLSX')
     check('mask_safe 同级_脱敏目录配对', p2 and '12月资产台账_脱敏' in p2, p2)
     # 父级 _脱敏 目录（合同/回函目录级）
-    p3 = prefer_masked(r'D:/底稿测试/ADF/数据/2026/借款合同_ocr/识别文本/3900苏震/x.txt')
+    p3 = prefer_masked(os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本', '3900苏震', 'x.txt'))
     check('mask_safe 目录级回退安全', p3 is not None)   # 无脱敏版回退原路径（读取层保守）
-    r = require_masked(r'D:/底稿测试/不存在/x.xlsx')
+    r = require_masked(os.path.join(P.DATA_DIRS['ADF'], '不存在', 'x.xlsx'))
     check('mask_safe require_masked 缺失→None', r is None)
 
 
@@ -67,9 +68,9 @@ def t_financing_ledger():
 def t_fa_ledger_mask():
     # 脱敏版存在性 + 公司代码→借X
     import os
-    end = r'D:/底稿测试/ADF/数据/2026/7月固定资产台账_脱敏.xlsx'
+    end = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '7月固定资产台账_脱敏.xlsx')
     check('fa_ledger_mask 脱敏版存在', os.path.exists(end))
-    beg = r'D:/底稿测试/ADF/数据/2026/12月固定资产台账/12月资产台账_脱敏'
+    beg = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '12月固定资产台账', '12月资产台账_脱敏')
     check('fa_ledger_mask 12月脱敏目录', os.path.isdir(beg))
     if os.path.exists(end):
         import openpyxl
@@ -95,7 +96,7 @@ def t_sap_adapter():
     import os
     old_root, old_comp = SA._DATA_ROOT, SA._current_comp
     try:
-        SA._DATA_ROOT = r'd:/底稿测试/ADF/数据/2026'
+        SA._DATA_ROOT = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026')
         SA._current_comp = '3100'
         km = SA.read_km()
         assert km, 'read_km 空'

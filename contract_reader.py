@@ -30,6 +30,7 @@
   python contract_reader.py <合同文件...> [--out 台账.json] [--merge]
   python contract_reader.py --scan <目录> [--out 台账.json]   # 批量识别
 """
+import paths as P
 import argparse
 import json
 import os
@@ -41,8 +42,8 @@ import sys
 # ============================================================
 
 # OCR 识别文本缓存目录（⚠️ 只读【本地脱敏版】，先运行 contract_mask_local.py 生成）
-_OCR_CACHE_DIR = r'd:/底稿测试/ADF/数据/2026/借款合同_ocr/识别文本_脱敏'
-_CONTRACT_BASE_DIR = r'd:/底稿测试/ADF/数据/2026/借款合同/化纤本年度新增借款合同'
+_OCR_CACHE_DIR = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本_脱敏')
+_CONTRACT_BASE_DIR = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同', '化纤本年度新增借款合同')
 
 
 def _read_ocr_cache(path):

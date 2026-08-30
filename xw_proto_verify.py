@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """验证 xlsxwriter 原型：merge/freeze/数值/行数与源一致"""
+import paths as P
 import openpyxl
 
-PROTO = r'D:/底稿测试/AH/tmp_xw/其他应收款_原型_xlsxwriter.xlsx'
-SRC = r'D:/底稿测试/XBJ/数据/2025/其他应收款审计底稿_2025_生成.xlsx'
+PROTO = os.path.join(P.DATA_DIRS['AH'], 'tmp_xw', '其他应收款_原型_xlsxwriter.xlsx')
+SRC = os.path.join(P.DATA_DIRS['XBJ'], '数据', '2025', '其他应收款审计底稿_2025_生成.xlsx')
 
 wb = openpyxl.load_workbook(PROTO, data_only=True)
 ws = wb.active

@@ -34,6 +34,7 @@
 """
 
 # ---- 启动诊断（先于 import openpyxl，便于排查"拖入闪退无痕迹"）----
+import paths as P
 import os as _bs_os
 import sys as _bs_sys
 import subprocess as _bs_sub
@@ -107,7 +108,7 @@ def _load_contract_info():
     global _CONTRACT_INFO_CACHE
     if _CONTRACT_INFO_CACHE is None:
         try:
-            fp = os.path.join(r'd:/底稿测试/ADF/数据/2026', '合同信息_脱敏.json')
+            fp = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '合同信息_脱敏.json')
             with open(fp, encoding='utf-8') as f:
                 _CONTRACT_INFO_CACHE = json.load(f)
         except Exception:

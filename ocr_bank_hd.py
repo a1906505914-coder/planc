@@ -4,6 +4,7 @@
 覆盖 _ocr_识别结果/银行询证函回函/ 下的 txt（原始 PDF 在 银行询证函回函/，可随时重生成）。
 文本型 PDF → 直接用文本层；扫描件 → GPU OCR 全页。
 """
+import paths as P
 import os
 import sys
 import glob
@@ -15,8 +16,8 @@ import pymupdf as fitz
 import numpy as np
 from rapidocr_onnxruntime import RapidOCR
 
-SRC = r'D:\底稿测试\AZ\数据\2025\回函\银行询证函回函'
-DST = r'D:\底稿测试\AZ\数据\2025\回函\_ocr_识别结果\银行询证函回函'
+SRC = os.path.join(P.DATA_DIRS['AZ'], '数据', '2025', '回函', '银行询证函回函')
+DST = os.path.join(P.DATA_DIRS['AZ'], '数据', '2025', '回函', '_ocr_识别结果', '银行询证函回函')
 DPI = 300
 
 _engine = None

@@ -18,6 +18,7 @@
   python financing_mask.py            # 生成 融资明细_脱敏.xls + 残留校验
   python financing_mask.py --dry      # 只打印列头与脱敏样本（不写文件）
 """
+import paths as P
 import os
 import re
 import sys
@@ -25,8 +26,8 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC = r'd:/底稿测试/ADF/数据/2026/融资明细.xls'
-OUT = r'd:/底稿测试/ADF/数据/2026/融资明细_脱敏.xlsx'
+SRC = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '融资明细.xls')
+OUT = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '融资明细_脱敏.xlsx')
 
 try:
     from loan_detail import _fin_ent_code, _mask_bank, _mask_guarantor, _BANK_CODE_MAP

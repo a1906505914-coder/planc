@@ -11,7 +11,9 @@
 import os
 import sys
 
-DATA_ROOT = r'D:/底稿测试'
+import paths as P
+
+DATA_ROOT = P.DATA_ROOT  # 引用 paths 配置中心（AUDIT_DATA_ROOT 环境变量可覆盖）
 
 FREQ_MAP = {'年付': 'year', '半年付': 'half', '季付': 'quart', '月付': 'month'}
 FREQ_NUM = {'year': 12.0, 'half': 6.0, 'quart': 3.0, 'month': 1.0}

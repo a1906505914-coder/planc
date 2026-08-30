@@ -15,13 +15,14 @@
   python financing_review.py                     # ADF 统一融资专项
   python financing_review.py --acct ADF          # 指定账套
 """
+import paths as P
 import argparse
 import os
 import sys
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-DATA = r'd:/底稿测试/ADF/数据/2026'
+DATA = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026')
 FIN_MASKED = os.path.join(DATA, '融资明细_脱敏.xlsx')
 OUT_OVERVIEW = os.path.join(DATA, '融资全景_脱敏.xlsx')
 

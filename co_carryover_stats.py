@@ -2,9 +2,10 @@
 """CO 结转凭证识别统计（审阅/回归用）：各主体 CO 凭证数/金额 + 排除后 GL vs TB。
 用法：python co_carryover_stats.py [--out xlsx]
 """
+import paths as P
 import sys, io, os
-sys.path.insert(0, r'd:/底稿测试/账套取数审计小程序')
-os.chdir(r'd:/底稿测试/账套取数审计小程序')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 import openpyxl
@@ -12,7 +13,7 @@ from collections import defaultdict
 import sap_common as SC
 from audit_common import discover_entities
 
-D = r'd:/底稿测试/ADF/数据/2026'
+D = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026')
 COMPS = ['3300', '3500', '3700', '3900', '6100', '6900', '3400']
 
 

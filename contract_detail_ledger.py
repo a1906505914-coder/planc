@@ -8,6 +8,7 @@
 同时输出合同信息 JSON（供 loan_detail 借款底稿补充利率/担保列）。
 只读脱敏版，输出全部为 借X/贷X 代码。
 """
+import paths as P
 import os, re, sys, glob, json
 from collections import OrderedDict
 
@@ -16,9 +17,9 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Border, Side
 from loan_contract_reader import cn_amount_to_num, BORROWER_MAP, LENDER_MAP
 
-OCR_ROOT = r'd:/底稿测试/ADF/数据/2026/借款合同_ocr/识别文本_脱敏'
-OUT_XLSX = r'd:/底稿测试/ADF/数据/2026/表外事项明细底稿.xlsx'
-OUT_JSON = r'd:/底稿测试/ADF/数据/2026/合同信息_脱敏.json'
+OCR_ROOT = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本_脱敏')
+OUT_XLSX = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '表外事项明细底稿.xlsx')
+OUT_JSON = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '合同信息_脱敏.json')
 
 BORROWER_DIR = {'借01', '借02', '借03', '借04', '借05', '借06'}
 

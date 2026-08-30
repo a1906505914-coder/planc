@@ -16,6 +16,7 @@
 
 用法：python mask_batch.py [--scan] [--out-dir <脱敏输出目录>]
 """
+import paths as P
 import argparse
 import os
 import re
@@ -30,7 +31,7 @@ import mask_config as MC  # noqa: E402
 import mask_dict as MD  # noqa: E402
 import mask_engine as ME  # noqa: E402
 
-DATA_ROOT = 'D:/底稿测试'
+DATA_ROOT = os.environ.get('AUDIT_DATA_ROOT', r'D://底稿测试')
 
 # 专项输出文件名关键词（进模型分析的核心底稿）
 PAT_FILE = re.compile(

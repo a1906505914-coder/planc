@@ -13,6 +13,7 @@ WorkBuddy 代码/数据/底稿全在本地单机，无协作账号冗余。本�
     python backup_all.py --only code              # 只备份代码（快，常跑）
     python backup_all.py --only data              # 只备份原始数据
 """
+import paths as P
 import os
 import sys
 import time
@@ -23,11 +24,11 @@ import zipfile
 BASE = os.path.dirname(os.path.abspath(__file__))
 CODE_DIR = BASE
 DATA_ROOTS = {
-    'AH': r'd:/底稿测试/AH',
-    'XBJ': r'd:/底稿测试/XBJ',
-    'ADF': r'd:/底稿测试/ADF',
+    'AH': P.DATA_DIRS['AH'],
+    'XBJ': P.DATA_DIRS['XBJ'],
+    'ADF': P.DATA_DIRS['ADF'],
 }
-DEFAULT_OUT = r'D:/审计备份'
+DEFAULT_OUT = os.environ.get('AUDIT_BACKUP_ROOT', r'D:/审计备份')
 
 _EXCLUDE_DATA = ('_work', '_archive', '.cache', '__pycache__', '.git', '_conv_before_备份')
 _EXCLUDE_WP = ('_archive', '.cache', '_work')

@@ -6,14 +6,15 @@
 扫描件PDF → 内存OCR前4页(借款金额/利率/期限/双方 在前几页)
 输出 → 借款合同_ocr/识别文本/<相对路径>.txt（受控本地，断点续跑）
 """
+import paths as P
 import os, sys, glob
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pymupdf as fitz
 import numpy as np
 from contract_reader import ocr_image_array
 
-CONTRACT_DIR = r'd:/底稿测试/ADF/数据/2026/借款合同/化纤本年度新增借款合同'
-OUT_DIR = r'd:/底稿测试/ADF/数据/2026/借款合同_ocr/识别文本'
+CONTRACT_DIR = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同', '化纤本年度新增借款合同')
+OUT_DIR = os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本')
 MAX_PAGES = 4          # 扫描件只OCR前4页（关键信息页）
 DPI = 150
 

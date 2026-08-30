@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """xlsxwriter 渲染原型：验证 双行表头(merge) + 66万行流式 + freeze 兼容审计规范。
 样本取 XBJ 其他应收款明细表前 N 行真实数据。"""
+import paths as P
 import openpyxl, xlsxwriter, time, os
 
-SRC = r'D:/底稿测试/XBJ/数据/2025/其他应收款审计底稿_2025_生成.xlsx'
-OUT = r'D:/底稿测试/AH/tmp_xw/其他应收款_原型_xlsxwriter.xlsx'
+SRC = os.path.join(P.DATA_DIRS['XBJ'], '数据', '2025', '其他应收款审计底稿_2025_生成.xlsx')
+OUT = os.path.join(P.DATA_DIRS['AH'], 'tmp_xw', '其他应收款_原型_xlsxwriter.xlsx')
 N = int(os.environ.get('PROTO_ROWS', '5000'))
 
 HEADERS = ['核算主体', '序号', '往来单位编号', '往来单位名称', '款项性质', '是否关联方', '币种',

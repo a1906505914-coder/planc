@@ -16,6 +16,7 @@ ocr_keypages.py 标记废弃（逻辑已并入）。比 CPU 快约 5 倍（实�
 
 文本型PDF → 直接提取全页文本；扫描件 → OCR前4页。输出受控本地，断点续跑。
 """
+import paths as P
 import os
 import sys
 import glob
@@ -35,9 +36,9 @@ else:
     from rapidocr_onnxruntime import RapidOCR
 
 CONTRACT_DIR = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else \
-    r'd:/底稿测试/ADF/数据/2026/借款合同/化纤本年度新增借款合同'
+    os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同', '化纤本年度新增借款合同')
 OUT_DIR = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith('-') else \
-    r'd:/底稿测试/ADF/数据/2026/借款合同_ocr/识别文本'
+    os.path.join(P.DATA_DIRS['ADF'], '数据', '2026', '借款合同_ocr', '识别文本')
 # --all 全页识别模式；默认只 OCR 扫描件前4页（关键信息页）
 ALL_PAGES = '--all' in sys.argv or os.environ.get('OCR_ALL_PAGES') == '1'
 MAX_PAGES = 9999 if ALL_PAGES else 4

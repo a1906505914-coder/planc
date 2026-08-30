@@ -7593,6 +7593,25 @@ def build_all_in_dir(data_dir, out_dir=None, period_mode="Y", subject=None, only
                                           tb_full=_tb_full, ac_ents=_ac_ents)
                 _wb_out.close()
                 print(f'✅ [xw] 已生成：{_out_y}（合并 {len(entities)} 个核算主体，末级行合计 {n_total}）')
+                # ⚡⚡ 2026-08-30 修复：xw 版结构性缺失（附注汇总）+ 合计行不符（完整性 ERROR）。
+                #   openpyxl 后处理：recalc_totals 重算各 sheet 合计/小计 + 追加附注汇总
+                #   （xw 文件<1MB，无 OOM；_append_ca_footnote_sheet 支持外部 wb 免二次 load）。
+                try:
+                    import openpyxl as _ox
+                    from recalc_totals import recalc_sheet as _recalc
+                    from current_account_detail import _append_ca_footnote_sheet
+                    _wb2 = _ox.load_workbook(_out_y)
+                    _fixed = 0
+                    for _sn in list(_wb2.sheetnames):
+                        _fixed += _recalc(_wb2[_sn])
+                    _append_ca_footnote_sheet(_out_y, key, subj, comb_customers, comb_summary,
+                                              aging_map, bt, _tb_full, _y, gl_full=None, wb=_wb2)
+                    _wb2.save(_out_y)
+                    _wb2.close()
+                    if _fixed:
+                        print(f'  ↳ [xw] 后处理：重算 {_fixed} 个合计单元格 + 附注汇总已追加')
+                except Exception as _ex:
+                    print(f'  ⚠️ [xw] 后处理失败 [{key}] {_y}：{_ex}')
                 if _first_out is None:
                     _first_out = _out_y
                 results[key] = (_first_out, n_total, comb_issues)

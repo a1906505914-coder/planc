@@ -216,10 +216,15 @@ SUBJECTS = {
                             "管理费用", "销售费用", "制造费用", "应付账款", "银行存款"],
                 notes_debit=GENERIC_NOTE, notes_credit=GENERIC_NOTE),
     "ORA": dict(label="其他应收款", kw="其他应收款", sheet="其他应收款明细表", nature="asset",
+                # ⚡⚡ 2026-08-30 归并（审计列报口径，用户定）：应收股利/应收利息 TB 独立一级，
+                #   报表列报归入其他应收款 → ext_kw 吸收（1131/1132）。
+                ext_kw=["应收股利", "应收利息"],
                 exp_debit=["银行存款", "库存现金"],
                 exp_credit=["银行存款", "库存现金"],
                 notes_debit=GENERIC_NOTE, notes_credit=GENERIC_NOTE),
     "ORP": dict(label="其他应付款", kw="其他应付款", sheet="其他应付款明细表", nature="liability",
+                # ⚡⚡ 2026-08-30 归并（用户定）：应付股利/应付利息 报表归入其他应付款 → 吸收（2231/2232）。
+                ext_kw=["应付股利", "应付利息"],
                 exp_debit=["银行存款", "库存现金"],
                 exp_credit=["银行存款", "库存现金", "管理费用", "销售费用",
                             "制造费用", "应付职工薪酬"],
@@ -909,6 +914,13 @@ def _is_subject_km(km, kw):
     if km.startswith("坏账准备") or km.startswith("信用减值损失"):
         return False
     return True
+
+
+def _subj_kws(subj):
+    """科目匹配关键词集：主 kw + ext_kw（归并吸收的 TB 独立一级科目，如应收股利→其他应收款）。"""
+    kws = [subj['kw']]
+    kws += list(subj.get('ext_kw') or [])
+    return [k for k in kws if k]
 
 
 def _name_hit(nm, kw):
@@ -6637,7 +6649,7 @@ def _inject_ca_audit_sheets(out_y, key, subj, data_dir, tb_full, ac_ents, y, rec
         # 合同负债审定表全 0 空壳）。名称命中取【最短代码】（一级；U8 6 位码账套如 JTt
         # 靠 flow 审定表 _amt_raw 前缀+末级子目求和兜底），排除备抵词（坏账/减值/跌价）。
         _name_codes = sorted({str(c) for (e, c, n, yy), v in tb_full.items()
-                              if str(yy) == str(y) and _name_hit(n, subj['kw'])
+                              if str(yy) == str(y) and any(_name_hit(n, k) for k in _subj_kws(subj))
                               and not any(k in str(n) for k in ('坏账', '减值', '跌价', '重分类'))
                               and not str(c).startswith(('1231', '1471', '1602', '1703'))
                               and (abs(float(v.get('qc') or 0.0)) > 0.005
@@ -6664,7 +6676,7 @@ def _inject_ca_audit_sheets(out_y, key, subj, data_dir, tb_full, ac_ents, y, rec
             _all = _ca_code_all(key)
             return _all[0] if _all else _ca_code.get(key, key)
         _name_codes = sorted({str(c) for (e, c, n, yy), v in tb_full.items()
-                              if str(yy) == str(y) and _name_hit(n, subj['kw'])
+                              if str(yy) == str(y) and any(_name_hit(n, k) for k in _subj_kws(subj))
                               and not any(k in str(n) for k in ('坏账', '减值', '跌价', '重分类'))
                               and not str(c).startswith(('1231', '1471', '1602', '1703'))
                               and (abs(float(v.get('qc') or 0.0)) > 0.005

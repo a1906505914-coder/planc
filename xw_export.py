@@ -32,7 +32,8 @@ def build_xw_export(output, periods, comb_customers, comb_summary, issues, comb_
             _XAS.render_audit_summary_xw(
                 wb, _title, subj.get("label", label), tb_full, ac_ents,
                 target_year=target_year,
-                names=[subj.get("kw", "")] if subj.get("kw") else None,
+                # ⚡⚡ 2026-08-30 归并（用户定）：主 kw + ext_kw（应收股利→其他应收款 等）
+                names=[k for k in ([subj.get("kw", "")] + list(subj.get("ext_kw") or [])) if k],
                 is_credit=(subj.get("nature") == "liability"))
         except Exception as _ex:
             print(f'  ⚠️ 审定表 xw 失败：{_ex}')

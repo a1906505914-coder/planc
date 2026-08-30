@@ -2966,10 +2966,24 @@ def process_folder(data_dir, out_path=None):
 def _build_year_workbook(data_dir, ents, year, gkey):
     sp = GROUPS[gkey]
     recs = []
+    # ⚡⚡ 2026-08-30 修复：集团模式 current_comp=None → read_km 把区间文件(2310~2400.xlsx)
+    #   解析为区间起点主体 2310 → 2330-2400 固定资产原值全部串号（710.9M）。
+    #   逐主体显式 set_comp(ent)（同 revenue #740 修复），函数结束恢复。
+    try:
+        import sap_adapter as _A
+        _orig_comp = _A.current_comp()
+    except Exception:
+        _orig_comp = None
     for ent in sorted(ents):
         km_path = ents[ent]['km'].get(year)
         if not km_path:
             continue
+        try:
+            import sap_adapter as _A2
+            if hasattr(_A2, 'set_comp'):
+                _A2.set_comp(ent)
+        except Exception:
+            pass
         # ⚡ 2026-08-13 原则（用户定）：生成器只负责生成底稿，数据问题全部在前端解决。
         #   _read_km 在前端（SAP 下被 patch 为 adapter.read_km）内部按 current_comp
         #   解析主体，生成器不感知数据形态、不分支（SAP 区间文件主体解析在 adapter 层）。
@@ -3002,6 +3016,12 @@ def _build_year_workbook(data_dir, ents, year, gkey):
         else:
             print(f'  [SKIP] {_gname} 组：本账套 TB 无该组科目（无数据，不产生空底稿）')
         # 该组本年无数据，跳过（不产生空底稿）
+        try:
+            import sap_adapter as _A3
+            if hasattr(_A3, 'set_comp'):
+                _A3.set_comp(_orig_comp)
+        except Exception:
+            pass
         return 0
 
     out_path = os.path.join(data_dir, '%s_%s_生成.xlsx' % (sp['paper'], year))
@@ -3082,6 +3102,12 @@ def _build_year_workbook(data_dir, ents, year, gkey):
         raise PermissionError(_save_warn or '保存失败：目标与副本均无法写入')
     wb.close()
     print(f'[DONE] 已生成：{out_path}')
+    try:
+        import sap_adapter as _A4
+        if hasattr(_A4, 'set_comp'):
+            _A4.set_comp(_orig_comp)
+    except Exception:
+        pass
     return 0
 
 

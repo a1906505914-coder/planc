@@ -319,8 +319,8 @@ def run_current_account(comp):
     #   （此前文件留在 _work_{comp} 未移入底稿目录）。
     os.makedirs(OUT, exist_ok=True)
     for fn in os.listdir(_work()):
-        if fn.endswith('_2026_生成.xlsx') and '审计底稿' in fn:
-            base = fn.replace('_2026_生成.xlsx', '')
+        if fn.endswith(f'_{YEAR}_生成.xlsx') and '审计底稿' in fn:
+            base = fn.replace(f'_{YEAR}_生成.xlsx', '')
             src = os.path.join(_work(), fn)
             dst = os.path.join(OUT, f'{base}_{comp}.xlsx')
             try:

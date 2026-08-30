@@ -551,7 +551,9 @@ def _aggregate(path):
             use_cr = (abs(t.get('rev_dr', 0.0)) < 1e-9)
             if _is_sap:
                 use_cr = True   # SAP：收入一律取贷方（借方=红字冲回，铁律3；集团模式同）
-            amt = row['credit'] if use_cr else row['debit']
+            # ⚡⚡ 2026-08-30 用户决策：营业收入与 TB 一致（净额口径）→ 贷方-借方（红字冲回抵减）。
+            #   原铁律3 取贷方总额 → 与自建试算表期末余额存在"总额 vs 净额"差异（1010 62.7亿 vs 32.6亿）。
+            amt = row['credit'] - row['debit']
             d['rev_m'][m] += amt
             l2 = _l2_key(nm)
             d['rev_l2'].setdefault(l2, _empty_month())[m] += amt

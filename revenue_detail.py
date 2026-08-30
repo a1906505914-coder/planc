@@ -527,8 +527,21 @@ def _aggregate(path):
         })
         d['gl_max_m'] = y_tot.get(y, {}).get('max_m', 0)   # GL 实际最大月份（期间错配识别用）
         nm = row['name']
-        m = row['month']
-        if m is None:
+        m = row.get('month')
+        if not m:
+            # ⚡⚡ 2026-08-30 U8 部分主体 GL 行 month 缺失/0（date 正常）→ 从 date 解析，
+            #   否则 d['rev_m'][0] KeyError（XBJ revenue group 取数失败）。
+            _dt = row.get('date')
+            try:
+                if hasattr(_dt, 'month'):
+                    m = _dt.month
+                else:
+                    _s = str(_dt or '')
+                    _mm = re.search(r'[-\/](\d{1,2})(?:[-\/]|$)', _s)
+                    m = int(_mm.group(1)) if _mm else None
+            except Exception:
+                m = None
+        if not m:
             continue
         if _is_rev(nm):
             t = y_tot.get(y, {})

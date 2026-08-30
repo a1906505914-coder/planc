@@ -201,6 +201,11 @@ def _match_name(name, g):
         # 误吸入 PAIDIN（1010 曾 matched 4 行 → pfxs 双前缀 → 聚合失败 → 实收资本漏子目）。
         # 股本命中须排除资本公积类（'资本(股本)溢价' 是资本公积子目，非实收资本）。
         return ('实收资本' in n) or ('股本' in n and '资本公积' not in n)
+    if g['key'] == 'SURRES':
+        # ⚡⚡ 2026-08-30 修复：『利润分配-提取法定盈余公积』(4104) 名称含"盈余公积"被误吸入
+        #   SURRES → matched 前缀 {4101,4104} 分裂 → 虚拟父级聚合失效 → 主科目取第一子目
+        #   (法定 410101) 漏『任意盈余公积』(410102)。例：1020 底稿 21.3M vs TB 23.4M。
+        return '盈余公积' in n and '利润分配' not in n
     return any(kw in n for kw in g['names'])
 
 

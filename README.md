@@ -60,6 +60,7 @@
 - 保存统一走 `audit_common._safe_save`（锁感知）；搬移统一走 `audit_common.move_if_free`。
 - 写表优先用 `xw_render.py`（xlsxwriter 渲染层），避免直接 openpyxl 逐 cell 大表。
 - 数据源规则（科目码/符号/功能范围/WBS）配置在 `account_profiles` / `sap_subject_map`，新账套先核对配置再跑。
+- **改公共层前先跑回归测试**：`python tests/test_architecture.py`（架构单测 31 项）+ `python tests/smoke_test.py`（冒烟 64 项），全绿再提交。
 
 ## 七、环境搭建（多人协作，2026-08-30）
 

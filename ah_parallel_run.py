@@ -39,6 +39,16 @@ GROUPS = {
 
 
 def main():
+    # ⚡⚡ 2026-08-31 参数化（消除 AH/2026 硬编码）：--acct/--data/--year 覆盖顶部默认。
+    global DATA, OUT_ROOT
+    import argparse as _ap
+    import tool_common as T
+    _parser = _ap.ArgumentParser(add_help=False)
+    T.add_tool_args(_parser, default_acct='AH')
+    _args, _ = _parser.parse_known_args()
+    DATA, YEAR = T.resolve_data(_args)
+    OUT_ROOT = os.path.join(os.path.dirname(DATA), '底稿', YEAR, '集团')
+    print(f'[tool_common] 数据目录={DATA} 年份={YEAR} 输出={OUT_ROOT}', flush=True)
     argv = sys.argv[1:]
     subj_opt = []
     if '--subj' in argv:

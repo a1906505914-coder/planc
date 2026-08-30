@@ -68,10 +68,18 @@ def archive(data_root, use_zip=False):
 def main():
     argv = sys.argv[1:]
     use_zip = '--zip' in argv
-    data_root = AH_WP
+    data_root = None
     if '--data' in argv:
         i = argv.index('--data')
         data_root = argv[i + 1]
+    if data_root is None:
+        # ⚡⚡ 2026-08-31 参数化：--acct/--year 走 tool_common（替代默认 AH_WP）
+        import argparse, tool_common as T
+        _ap = argparse.ArgumentParser(add_help=False)
+        T.add_tool_args(_ap, default_acct='AH')
+        _args, _ = _ap.parse_known_args()
+        DATA, YEAR = T.resolve_data(_args)
+        data_root = os.path.join(os.path.dirname(DATA), '底稿', YEAR, '集团')
     sys.exit(archive(data_root, use_zip=use_zip))
 
 

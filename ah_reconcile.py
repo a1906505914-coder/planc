@@ -141,6 +141,17 @@ def extract_wp_total(fp):
 
 
 def main():
+    # ⚡⚡ 2026-08-31 参数化：--acct/--data/--year 覆盖顶部 PREP/ALL_TB（消除 AH/2026 硬编码）
+    import argparse, tool_common as T
+    global PREP, ALL_TB
+    _ap = argparse.ArgumentParser(add_help=False)
+    T.add_tool_args(_ap, default_acct='AH')
+    _args, _ = _ap.parse_known_args()
+    DATA, YEAR = T.resolve_data(_args)
+    acct_root = os.path.dirname(os.path.dirname(DATA))   # 数据目录上两级 = 账套根
+    PREP = os.path.join(acct_root, '中间产物', 'prepared')
+    ALL_TB = os.path.join(PREP, f'自建试算表_{YEAR}.xlsx')
+    print(f'[tool_common] 账套根={acct_root} 年份={YEAR}', flush=True)
     print('===== 第一层：三集团试算表之和 vs 全公司试算表 =====')
     r1 = layer1()
     print(f'科目差异（|差|>0.005）: {len(r1)} 个')

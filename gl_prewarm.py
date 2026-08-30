@@ -15,6 +15,26 @@ from ah_parallel_run import GROUPS
 DATA = os.path.join(P.DATA_DIRS['AH'], '数据', '2026')
 
 def main():
+    # ⚡⚡ 2026-08-31 参数化：--acct/--data/--year 覆盖顶部硬编码
+    import argparse, tool_common as T
+    global DATA
+    _ap = argparse.ArgumentParser(add_help=False)
+    T.add_tool_args(_ap, default_acct='AH')
+    _args, _ = _ap.parse_known_args()
+    _D, _Y = T.resolve_data(_args)
+    _AR = os.path.dirname(os.path.dirname(_D))
+    DATA = _D
+    _O = os.path.join(_AR, '底稿', _Y, '集团')
+    try:
+        OUT_ROOT = _O
+    except NameError:
+        pass
+    try:
+        ROOT = _O
+    except NameError:
+        pass
+    print(f'[tool_common] DATA={DATA} YEAR={_Y}', flush=True)
+
     comps = [c for g in GROUPS.values() for c in g]
     print(f'[预热] 共 {len(comps)} 主体：1010({len(GROUPS["1010"])}) 1357({len(GROUPS["1357"])}) 2468({len(GROUPS["2468"])})', flush=True)
     t0 = time.time()

@@ -40,6 +40,26 @@ GROUPS = {
 
 
 def main():
+    # ⚡⚡ 2026-08-31 参数化：--acct/--data/--year 覆盖顶部硬编码
+    import argparse, tool_common as T
+    global DATA, OUT_ROOT
+    _ap = argparse.ArgumentParser(add_help=False)
+    T.add_tool_args(_ap, default_acct='AH')
+    _args, _ = _ap.parse_known_args()
+    _D, _Y = T.resolve_data(_args)
+    _AR = os.path.dirname(os.path.dirname(_D))
+    DATA = _D
+    _O = os.path.join(_AR, '底稿', _Y, '集团')
+    try:
+        OUT_ROOT = _O
+    except NameError:
+        pass
+    try:
+        ROOT = _O
+    except NameError:
+        pass
+    print(f'[tool_common] DATA={DATA} YEAR={_Y}', flush=True)
+
     argv = sys.argv[1:]
     if not argv or argv[0] in ('-h', '--help'):
         print(__doc__)

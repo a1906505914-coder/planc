@@ -29,6 +29,17 @@ def _run(cmd):
 
 
 def main():
+    # ⚡⚡ 2026-08-31 参数化：--acct/--data/--year 覆盖默认 AH（消除 AH/2026 硬编码）
+    global AH_DATA, AH_OUT
+    import argparse, tool_common as T
+    _ap = argparse.ArgumentParser(add_help=False)
+    T.add_tool_args(_ap, default_acct='AH')
+    _args, _ = _ap.parse_known_args()
+    if _args.acct != 'AH' or _args.data or _args.year:
+        _DATA, _YEAR = T.resolve_data(_args)
+        AH_DATA = _DATA
+        AH_OUT = os.path.join(os.path.dirname(_DATA), '底稿', _YEAR, '集团')
+        print(f'[tool_common] 数据={AH_DATA} 输出={AH_OUT}', flush=True)
     argv = sys.argv[1:]
     if not argv or argv[0] in ('-h', '--help'):
         print(__doc__)

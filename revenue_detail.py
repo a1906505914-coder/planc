@@ -2395,7 +2395,13 @@ def build_revenue_workbook(data_dir):
     tb_all = {}
     data = {}
     aux_dept_all = {}     # E -> {y: _read_aux_dept 结果}（分部门明细表数据源，2026-08-01）
+    # ⚡⚡ 2026-08-30 集团模式逐主体锁定：current_comp=None 时 read_km/_aggregate 的区间文件
+    #   （2310~2400.xlsx）解析为【区间起点】主体（2310）→ 2370 读到 2310 数据（串号根因，
+    #   营业收入 8+ 主体同值 417.6M）。2405 注释设计"read_km 按 current_comp"需在此激活。
+    _orig_comp = _adapter.current_comp() if (_adapter is not None and hasattr(_adapter, 'current_comp')) else None
     for E in entities:
+        if _adapter is not None and hasattr(_adapter, 'set_comp'):
+            _adapter.set_comp(E)
         yd = entities[E]
         tb_all[E] = {}
         data[E] = {}
@@ -2413,6 +2419,9 @@ def build_revenue_workbook(data_dir):
                 data[E][y] = agg.get(y, {})
             if paths.get('aux'):
                 aux_dept_all[E][y] = _read_aux_dept(paths['aux'])
+    # ⚡⚡ 恢复 current_comp（集团模式循环结束还原 None，避免污染后续读取）
+    if _adapter is not None and hasattr(_adapter, 'set_comp'):
+        _adapter.set_comp(_orig_comp)
 
     # 按年独立构建并保存（2026-07-31 用户要求：与其他科目一致，每年一份底稿；
     # 本期=cur_y、上年对比=prev_y（有则显示），符合铁律20 每年底稿只含当年数据）

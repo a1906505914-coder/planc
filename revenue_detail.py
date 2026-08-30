@@ -551,9 +551,10 @@ def _aggregate(path):
             use_cr = (abs(t.get('rev_dr', 0.0)) < 1e-9)
             if _is_sap:
                 use_cr = True   # SAP：收入一律取贷方（借方=红字冲回，铁律3；集团模式同）
-            # ⚡⚡ 2026-08-30 用户决策：营业收入与 TB 一致（净额口径）→ 贷方-借方（红字冲回抵减）。
-            #   原铁律3 取贷方总额 → 与自建试算表期末余额存在"总额 vs 净额"差异（1010 62.7亿 vs 32.6亿）。
-            amt = row['credit'] - row['debit']
+            # ⚡⚡ 2026-08-30 结论：营业收入取贷方发生额（铁律3）即与 TB 利润表（Sheet3 发生额）
+            #   一致（1030: 贷方20.5亿 = Sheet3 20.5亿）。曾试改净额 credit-debit，但红字冲回
+            #   记借方负数 → credit-debit 双计（41亿=20.5×2）→ 回退，维持贷方口径。
+            amt = row['credit'] if use_cr else row['debit']
             d['rev_m'][m] += amt
             l2 = _l2_key(nm)
             d['rev_l2'].setdefault(l2, _empty_month())[m] += amt
@@ -1878,18 +1879,18 @@ def build_revenue_audit_sheet(wb, entities, tb_all, cur_y, prev_y):
 
     def _tb(ent, y, role):
         """从 TB 取数：rev→credit, cost→debit, other_rev→credit, other_cost→debit。
-        ⚡⚡ 2026-08-30 用户决策"与 TB 一致"：收入/成本改【净额】口径（贷-借/借-贷），
-        与自建试算表期末余额对齐（原 gross 贷方总额 vs 试算表净额 → 营业收入 62.7亿 vs 32.6亿差异）。"""
+        ⚡⚡ 2026-08-30 结论：维持 gross 贷方/借方口径（铁律3）——与 TB 利润表发生额一致
+        （收入取贷、成本取借；净额改法因红字冲回借方负数导致双计 ×2，已回退）。"""
         tb = tb_all.get(ent, {}).get(y, {})
         cd = _detect_codes(tb)
         if role == 'rev':
-            return _tb_total(tb, 'rev', 'cr') - _tb_total(tb, 'rev', 'db')
+            return _tb_total(tb, 'rev', 'cr')
         elif role == 'cost':
-            return _tb_total(tb, 'cost', 'db') - _tb_total(tb, 'cost', 'cr')
+            return _tb_total(tb, 'cost', 'db')
         elif role == 'orev':
-            return (_tb_total(tb, 'orev', 'cr') - _tb_total(tb, 'orev', 'db')) if cd.get('orev') else 0.0
+            return _tb_total(tb, 'orev', 'cr') if cd.get('orev') else 0.0
         elif role == 'ocost':
-            return (_tb_total(tb, 'ocost', 'db') - _tb_total(tb, 'ocost', 'cr')) if cd.get('ocost') else 0.0
+            return _tb_total(tb, 'ocost', 'db') if cd.get('ocost') else 0.0
         return 0.0
 
     # 行定义：(label, role, is_minus, is_profit)

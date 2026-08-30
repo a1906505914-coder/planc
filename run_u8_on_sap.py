@@ -610,6 +610,18 @@ def main(argv=None):
                 A._GROUP_COMPS = set(GROUP_ONLY)
         except Exception:
             pass
+    # ⚡⚡ 2026-08-30 大集团自动 xw 化（88 家合并 current_account openpyxl 卡死教训）：
+    #   group 模式主体数超 40 → 强制 CA_XW=1。xw 只影响 current_account 分支，
+    #   其他模块无 CA_XW 分支、行为不变 → 自动启用安全。
+    if group_mode:
+        try:
+            _nent = len(A.discover_entities(DATA))
+            if _nent > 40 and not os.environ.get('CA_XW'):
+                os.environ['CA_XW'] = '1'
+                print(f'⚡ [{_nent} 个主体] 大集团自动启用 xw 渲染（current_account），'
+                      f'避免 openpyxl 88 家大表卡死', flush=True)
+        except Exception:
+            pass
     if _out_dir:
         OUT = os.path.abspath(_out_dir)
         print(f'[--out-dir] 输出目录：{OUT}', flush=True)

@@ -36,8 +36,9 @@ def _aggregate_bs(tb_full, entities, eff_years, codes, names, is_credit, keep_si
                 #   排除：名称含 递延所得税/跌价，或 code 1811/2901（递延所得税），或
                 #   名称以『其他』开头但非本组（其他应收/其他应付属独立组）。
                 _nm = str(n)
-                if ('坏账' in _nm) or ('坏帐' in _nm) or ('递延所得税' in _nm) or ('跌价' in _nm) \
-                        or str(c).startswith(('1231', '1471', '1602', '1703', '1811', '2901')) \
+                if ('坏账' in _nm) or ('坏帐' in _nm) or ('减值' in _nm) or ('跌价' in _nm) \
+                        or ('递延所得税' in _nm) \
+                        or str(c).startswith(('1231', '1471', '1482', '1602', '1703', '1811', '2901')) \
                         or (_nm.startswith('其他') and not any(nm and _nm.startswith(nm) for nm in names)):
                     continue
             elif codes:

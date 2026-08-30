@@ -17,6 +17,16 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 import sap_reader as SR
 import sap_common as C
+import sap_adapter as A   # ⚡⚡ 2026-08-30 支持 U8（XBJ）回退 + 年份推断
+
+
+def _infer_year(data):
+    """从数据目录推断年份（同 run_u8_on_sap）。消除 year='2026' 硬编码。"""
+    m = re.search(r'[\\/]数据[\\/]?(\d{4})', data)
+    if m:
+        return m.group(1)
+    m = re.findall(r'(\d{4})', data)
+    return m[-1] if m else '2026'
 
 # ---- 样式（与现有底稿一致）----
 TITLE_FONT = Font(name='Times New Roman', size=12, bold=True)
@@ -125,9 +135,16 @@ def _l1(name):
     return C.norm_l1(name)
 
 
-def build_sap_tb(data_dir, out_path=None, year='2026', comps=None):
-    """生成 SAP 自建试算表。comps=None 时用全部公司。返回文件路径。"""
-    tb = SR.read_sap_tb(data_dir, None, year=year)
+def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
+    """生成 SAP 自建试算表。comps=None 时用全部公司。返回文件路径。
+    ⚡⚡ 2026-08-30：改走 sap_adapter.read_tb_full（SAP/U8 双支持 + 年份自动推断）。"""
+    if year is None:
+        year = _infer_year(data_dir)
+    A._DATA_ROOT = data_dir
+    _tb_all = A.read_tb_full(data_dir, None)
+    # 过滤目标年份（键 y 可能是 int/str）
+    tb = {(c, cd, n, y): v for (c, cd, n, y), v in _tb_all.items()
+          if str(y) == str(year)}
     # 实体列表：TB 中实际出现的公司
     all_comps = sorted({c for (c, _cd, _n, _y) in tb})
     if comps:

@@ -61,7 +61,7 @@ def main():
     for fn in sorted(os.listdir(out)):
         if not fn.endswith('.xlsx'):
             continue
-        subj = fn.replace('审计底稿_AH合并.xlsx', '').replace('审计底稿_2026_生成.xlsx', '')
+        subj = fn.split('审计底稿')[0].strip()   # 通用命名（AH合并/XBJ/2025_生成 全适配）
         try:
             wb2 = openpyxl.load_workbook(os.path.join(out, fn), read_only=True, data_only=True)
             sns = [s for s in wb2.sheetnames if '审定表' in s and '集团' not in s and '合并' not in s]
@@ -77,13 +77,13 @@ def main():
             # ⚡ 跳过表头后的空行（审定表标题/说明/空行）找首个数据行
             is_struct_b = False
             for _r0 in rws[hi + 1:]:
-                if _r0 and _r0[0] and str(_r0[0]).strip().isdigit():
+                if _r0 and _r0[0] and str(_r0[0]).strip() not in ('合计', '总计', '全集团合计', '集团加计'):
                     if _r0[1] and any(k in str(_r0[1]) for k in ('原值', '累计折旧', '减值准备', '净值', '账面')):
                         is_struct_b = True
                     break
             wp = {}
             for r in rws[hi + 1:]:
-                if not r or not r[0] or not str(r[0]).strip().isdigit():
+                if not r or not r[0] or str(r[0]).strip() in ('合计', '总计', '全集团合计', '集团加计'):
                     continue
                 e = str(r[0]).strip()
                 if is_struct_b:
@@ -113,7 +113,14 @@ def main():
                         break
             if tbk is None:
                 continue
-            tbm = tb_rows[tbk]
+            tbm = dict(tb_rows[tbk])
+            # ⚡⚡ 2026-08-30 归并（审计列报口径）：其他应收/应付 需并入 应收/应付股利利息（TB 分开）
+            MERGE = {'其他应收款': ['应收股利', '应收利息'],
+                     '其他应付款': ['应付股利', '应付利息']}
+            for _mk in MERGE.get(subj, []):
+                if _mk in tb_rows:
+                    for _e, _v in tb_rows[_mk].items():
+                        tbm[_e] = tbm.get(_e, 0.0) + _v
             real = []
             sign = 0
             diff_tot = 0.0

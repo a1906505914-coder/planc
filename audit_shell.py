@@ -402,6 +402,15 @@ def finalize_workbook(wb):
         inject_program_sheets(wb, meta)
     except Exception:
         pass
+    # ⚡⚡ 2026-08-30 批次A P0：构建时内建断言（合计/小计行 = 明细加总）。
+    #   复用 audit_checker 口径（_mem_total_fix），默认 WARN 记录、AUDIT_FAIL_FAST=1 时中止；
+    #   放在样式统一之前执行，保证读到的仍是 builder 写入的原始数值行。
+    try:
+        assert_build_totals(wb)
+    except AssertionError:
+        raise
+    except Exception:
+        pass
     for ws in wb.worksheets:
         try:
             _unify_sheet(ws)
@@ -499,3 +508,54 @@ def build_merge_wide_sheet(wb, sheet_name, title, rows, ent_vals, prev_vals=None
         ws.column_dimensions[get_column_letter(j)].width = 15
     ws.freeze_panes = 'C3'
     return ws
+
+
+def assert_build_totals(wb, fail_fast=None):
+    """构建时内建断言（2026-08-30 批次A P0）：写表前校验『合计/小计行 = 明细加总』。
+
+    复用 audit_checker._mem_total_fix（纯内存、同口径：容差 0.005 / 公式单元格 /
+    差异·勾稽列 / 集团合计 豁免）——把事后 audit_checker 的 E1 检查提前到生成时，
+    避免"跑完全量才发现合计错误"。
+
+    行为：
+      - 默认 warn：发现问题记录到 wb._build_issues 并打印 [BUILD-ASSERT][WARN]（不中断量产）；
+      - fail_fast=True 或环境变量 AUDIT_FAIL_FAST=1：任一 sheet 存在需修正合计 → 抛异常中止，
+        防止坏底稿静默交付。
+      - 大 sheet 保护：单 sheet 行数 > 上限（默认 20000，env AUDIT_ASSERT_MAX_ROWS 可调）跳过，
+        交事后 audit_checker 兜底，避免大表 OOM（XBJ/current_account 10 万行场景）。
+
+    返回 [(sheet_title, n_fix)]；异常降级返回 []（不闪退）。
+    """
+    import os as _os
+    try:
+        from audit_checker import _mem_total_fix
+    except Exception:
+        return []
+    ff = fail_fast
+    if ff is None:
+        ff = _os.environ.get('AUDIT_FAIL_FAST', '') == '1'
+    try:
+        max_rows = int(_os.environ.get('AUDIT_ASSERT_MAX_ROWS', '20000'))
+    except Exception:
+        max_rows = 20000
+    issues = []
+    for ws in wb.worksheets:
+        try:
+            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        except Exception:
+            continue
+        if not rows or len(rows) > max_rows:
+            continue
+        try:
+            n = _mem_total_fix(rows)
+        except Exception:
+            n = 0
+        if n > 0:
+            issues.append((ws.title, n))
+    if issues:
+        wb._build_issues = issues
+        msg = '; '.join('%s:%d个合计单元格' % (s, n) for s, n in issues)
+        if ff:
+            raise AssertionError('[BUILD-ASSERT] 构建时内建断言未通过：%s' % msg)
+        print('[BUILD-ASSERT][WARN] %s' % msg, flush=True)
+    return issues

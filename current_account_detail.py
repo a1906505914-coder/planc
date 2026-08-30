@@ -210,7 +210,7 @@ SUBJECTS = {
                 exp_debit=["主营业务收入", "其他业务收入", "销项"],
                 exp_credit=["银行存款", "库存现金"],
                 notes_debit=GENERIC_NOTE, notes_credit=GENERIC_NOTE),
-    "APP": dict(label="预付账款", kw="预付", sheet="预付账款明细表", nature="asset",
+    "APP": dict(label="预付账款", kw="预付账款", sheet="预付账款明细表", nature="asset",
                 exp_debit=["银行存款", "库存现金"],
                 exp_credit=["库存商品", "原材料", "固定资产", "在建工程",
                             "管理费用", "销售费用", "制造费用", "应付账款", "银行存款"],
@@ -7672,7 +7672,7 @@ def build_all_in_dir(data_dir, out_dir=None, period_mode="Y", subject=None, only
                 if key in ('APP', 'ARN') and _all_years:
                     try:
                         from baddebt_common import scan_baddebt_subjects, build_baddebt_detail_sheet as _bd_sheet
-                        _kw = '预付' if key == 'APP' else '应收票据'
+                        _kw = '预付账款' if key == 'APP' else '应收票据'
                         for (_c, _nm, _qc, _qm) in scan_baddebt_subjects(_tb_full, _y):
                             if _kw in _nm:
                                 _bd_sheet(_wb_out, _tb_full, _gl_full, _y, _nm, subj['label'])

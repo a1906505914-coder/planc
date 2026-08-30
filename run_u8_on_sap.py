@@ -29,7 +29,21 @@ sys.path.insert(0, HERE)
 #   全部科目 SKIP 静默失败。SAP 主账套数据目录固定 = P.YY/数据/2026；仍支持首参拖拽覆盖。
 DATA = os.environ.get('AH_DATA_ROOT') or os.path.join(P.YY, '数据', '2026')
 OUT = os.path.join(DATA, '底稿')
-YEAR = '2026'
+
+
+def _infer_year(data):
+    """从数据目录路径推断年份，消除 '2026' 硬编码（跨账套/跨年不再改常量）。
+    识别形态：`.../数据/2026`、`.../数据/2025/...`、`.../AH/2026`（路径中 4 位数字段）。
+    ⚡⚡ 2026-08-30 修复：原 YEAR='2026' 写死 → XBJ(2025)/明年(2027) 必须改代码。
+    拖拽传参改 DATA 后须重新推断（main 内同步）。"""
+    m = re.search(r'[\\/]数据[\\/]?(\d{4})', data)
+    if m:
+        return m.group(1)
+    m = re.findall(r'(\d{4})', data)
+    return m[-1] if m else '2026'
+
+
+YEAR = _infer_year(DATA)
 # ⚡ 2026-08-10 修复：多进程并行（_sap_batch）时各家庭若都向 DATA 根目录写同名中间文件
 #   （{科目}审计底稿_2026_生成.xlsx）→ 进程间互相覆盖 → 文件写坏（实测 196 个 BadZipFile）。
 #   每家庭改用独立工作目录 _work_{comp}：生成器输出到该目录，再 move 到 OUT；读数据走
@@ -546,7 +560,7 @@ def _write_run_report(argv, run_log, stats, skips, failed_details):
 
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
-    global GROUP_MODE, GROUP_ONLY, _cur_work, DATA, OUT
+    global GROUP_MODE, GROUP_ONLY, _cur_work, DATA, OUT, YEAR
     # ⚡ 2026-08-11 拖拽支持：首参为文件夹路径（不以 '-' 开头）→ 视为数据根目录。
     #   拖入 yy/300 文件夹即可直接生成（与 current_account_detail 的拖入快捷方式对齐）。
     # ⚡ 2026-08-12 修复（落地错目录）：OUT 模块级由 DATA 导入时计算（默认 yy/底稿），
@@ -555,7 +569,8 @@ def main(argv=None):
     if argv and not argv[0].startswith('-') and os.path.isdir(argv[0]):
         DATA = os.path.abspath(argv[0])
         OUT = os.path.join(DATA, '底稿')
-        print(f'[拖拽模式] 数据根目录：{DATA}', flush=True)
+        YEAR = _infer_year(DATA)   # ⚡⚡ 2026-08-30 拖拽改 DATA 后同步年份
+        print(f'[拖拽模式] 数据根目录：{DATA}（年份 {YEAR}）', flush=True)
         argv = argv[1:]
     subj_only = None
     if '--subj' in argv:

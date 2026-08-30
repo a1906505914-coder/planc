@@ -462,7 +462,8 @@ def _resume_mark(comp, subj, status, csig, dsig):
         if tries >= 3:
             status = 'FAILED_PERM'
     recs[subj] = {'subj': subj, 'status': status, 'ts': time.strftime('%Y-%m-%d %H:%M:%S'),
-                  'csig': csig, 'dsig': dsig, 'tries': tries}
+                  'csig': csig, 'dsig': dsig, 'tries': tries,
+                  'host': __import__('socket').gethostname()}   # ⚡ 2026-08-30 多用户留痕：记录生成机器（不影响跨机续跑，签名校验兜底）
     fp = _resume_file(comp)
     try:
         tmp = fp + '.tmp'

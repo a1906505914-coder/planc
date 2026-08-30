@@ -60,3 +60,14 @@
 - 保存统一走 `audit_common._safe_save`（锁感知）；搬移统一走 `audit_common.move_if_free`。
 - 写表优先用 `xw_render.py`（xlsxwriter 渲染层），避免直接 openpyxl 逐 cell 大表。
 - 数据源规则（科目码/符号/功能范围/WBS）配置在 `account_profiles` / `sap_subject_map`，新账套先核对配置再跑。
+
+## 七、环境搭建（多人协作，2026-08-30）
+
+新成员加入只需 4 步（保证**同一份代码 + 同一依赖 → 同一结果**）：
+
+1. **拉代码**：`git clone <服务器仓库地址>`（或拷贝程序目录），确认 `git status` 干净；
+2. **建虚拟环境**：`python -m venv .venv` → `.venv\Scripts\activate` → `pip install -r requirements.txt`（依赖已锁定版本）；
+3. **指向数据**：设环境变量 `AUDIT_DATA_ROOT` 指向共享数据盘根目录（如 `set AUDIT_DATA_ROOT=E:\审计数据`），不设则用 `paths.py` 默认值；可选 `AUDIT_CACHE_DIR` / `AUDIT_GL_CACHE_DIR` 指向**本机本地缓存**（避免共享目录并发写缓存）；
+4. **统一运行**：一律经 `run_audit.bat`（固定 `PYTHONHASHSEED=0`，行序稳定）。
+
+铁律：**重跑期间不改代码**；全量只发生在收口（确定不再改代码后）；改代码前 `git status`、改后跑指纹回归。

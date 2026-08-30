@@ -341,8 +341,11 @@ def _tb_detail(tb, e, y, prefix, subj_name):
             continue
         # 2026-08-22 修复：SAP 科目余额表负债科目余额为负，read_tb_full 已按方向归一为正，
         # _tb_detail 原 `-v['qc']` 双反 → 期初负。负债借款科目余额取绝对值。
-        qc = abs(v['qc'])
-        qm = abs(v['qm'])
+        # ⚡⚡ 2026-08-30 修复（2480 长期借款 9.13亿 vs TB 4.7亿 根因）：abs 丢方向——借余子目
+        #   （2501010000 信用借款 +220.9M 借方余额，异常）被 abs 成正 → Σ|子目|=912.6M。
+        #   改 -v：贷余（负）→ 贷方余额正、借余（正）→ 负（异常），Σ = 贷方净额（与 309 行一致）。
+        qc = -v['qc']
+        qm = -v['qm']
         inc = v['df']
         dec = v['jf']
         out.append(dict(code=c, lender=(n or c), qc=qc, inc=inc, dec=dec, qm=qm))

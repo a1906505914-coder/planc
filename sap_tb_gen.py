@@ -136,12 +136,12 @@ def _l1(name):
     return C.norm_l1(name)
 
 
-def _rev_cost_agg(comp, tb, year, prefix, is_income):
+def _rev_cost_agg(comp, tb, year, prefix, is_income, mirror_mode=False):
     """收入/成本 TB 聚合（⚡⚡ 2026-08-31 修复 AH 收入/成本双计与冲减根因）：
     SAP 损益科目借贷双方均有发生（父级行 df、GL 流水行 df+jf、其他业务收入 jf 退回等）
-    → 一律取【净额】：收入 df−jf、成本 jf−df（=企业报表口径）。
-    ⚡⚡ 2026-09-01 补：借贷同额（镜像结转，XBJ 收入/成本 jf=df 同额）→ 净额=0 失真
-    → 同额取发生额（收入 df、成本 jf，=底稿/利润表口径）。"""
+    → 真实账套取【净额】：收入 df−jf、成本 jf−df（=企业报表口径）。
+    ⚡⚡ 2026-09-01 镜像账套（XBJ/AZ 损益科目借贷同额复制）→ 取发生额（收入 df、成本 jf，
+    =底稿口径），否则 jf=df 同额行净额=0 失真。镜像父级（父=子和）排除防双计。"""
     tot = 0.0
     rows = [(str(cd_), nm_, v_) for (cc_, cd_, nm_, yy_), v_ in tb.items()
             if cc_ == comp and str(yy_) == str(year) and str(cd_).startswith(prefix)]
@@ -162,15 +162,10 @@ def _rev_cost_agg(comp, tb, year, prefix, is_income):
             continue
         _d = float(v_.get('df') or 0.0)
         _j = float(v_.get('jf') or 0.0)
-        # ⚡⚡ 2026-09-01 镜像/接近判断（AZ 物联 6001 jf≠df 但差 0.007% → 镜像，取贷方）：
-        #   绝对同额 或 相对差<2%（镜像复制行）→ 取发生额（收入 df、成本 jf）；
-        #   真实借贷冲减（AH GL 流水差 18%）→ 取净额。
-        _m = max(abs(_d), abs(_j))
-        _mirror = abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)
         if is_income:
-            tot += _d if _mirror else (_d - _j)
+            tot += _d if mirror_mode else (_d - _j)
         else:
-            tot += _j if _mirror else (_j - _d)
+            tot += _j if mirror_mode else (_j - _d)
     return tot
 
 
@@ -278,6 +273,22 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         a = ent_l1[comp].setdefault(l1, {'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0})
         a['qc'] += v['qc']; a['jf'] += v['jf']; a['df'] += v['df']; a['qm'] += v['qm']
 
+    # ⚡⚡ 2026-09-01 账套损益口径模式：镜像账套（损益科目借贷同额复制，XBJ/AZ）→
+    #   损益取【发生额】（收入 df、成本 jf，=底稿口径）；真实账套（损益借贷不对称，
+    #   AH 信用减值 jf94.9M/df7.7M）→ 取【净额】（=企业报表口径）。AH 个别同额行
+    #   （630101 处置利得 jf=df=1.16M 结转镜像）净额=0 正确（企业报表营业外收入 10,374）。
+    _pl_probe = []
+    for (comp, code, name, yy), v in tb.items():
+        if str(code)[:1] in ('6', '7', '8'):
+            _d = float(v.get('df') or 0.0)
+            _j = float(v.get('jf') or 0.0)
+            if _d or _j:
+                _m = max(abs(_d), abs(_j))
+                _pl_probe.append(abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02))
+    _mirror_mode = bool(_pl_probe) and sum(_pl_probe) / len(_pl_probe) > 0.8
+    if _mirror_mode:
+        print(f'  ⚡ 损益口径=镜像账套（取发生额）')
+
     out_path = out_path or os.path.join(data_dir, f'自建试算表_{year}.xlsx')
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
@@ -373,45 +384,33 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         for j, c in enumerate(comps, 2):
             if rn == '营业收入':
                 # ⚡⚡ 2026-08-31 GL 流水行取净额（AH 父级+GL 双计修复，与底稿/TB 一致）
-                v = (_rev_cost_agg(c, tb, year, '6001', True)
-                     + _rev_cost_agg(c, tb, year, '6051', True))
+                v = (_rev_cost_agg(c, tb, year, '6001', True, _mirror_mode)
+                     + _rev_cost_agg(c, tb, year, '6051', True, _mirror_mode))
             elif rn == '营业成本':
-                v = (_rev_cost_agg(c, tb, year, '6401', False)
-                     + _rev_cost_agg(c, tb, year, '6402', False))
+                v = (_rev_cost_agg(c, tb, year, '6401', False, _mirror_mode)
+                     + _rev_cost_agg(c, tb, year, '6402', False, _mirror_mode))
             elif rn in _fs_cats and c in _fee_scope and rn in _fee_scope[c]:
                 v = _fee_scope[c][rn]   # 费用目录（TB 6600 池功能范围拆分）
             elif rn == '财务费用':
                 # ⚡⚡ 2026-08-31 与底稿一致（expense_detail tb_l2_control 净额）：
                 #   财务费用取 TB 净额（利息收入等贷方冲减），非借发。
-                #   ⚡⚡ 2026-09-01 补：借贷同额（XBJ 镜像）→ 取借发（同 _rev_cost_agg）
+                #   ⚡⚡ 2026-09-01 镜像账套取借发（XBJ/AZ），真实账套取净额（AH）
                 _t = 0.0
                 for l1, a in ent_l1[c].items():
                     if any(k in l1 for k in kws):
                         _d = a['df']; _j = a['jf']
-                        _m = max(abs(_d), abs(_j))
-                        _t += _j if (abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)) else (_j - _d)
+                        _t += _j if _mirror_mode else (_j - _d)
                 v = _t
             else:
                 # ⚡⚡ 2026-08-31 损益科目取净额（AH 信用减值/资产减值/其他收益/
-                #   投资收益等借贷双方冲减 → 净额=企业报表口径）；⚠️ 2026-09-01 补：
-                #   XBJ 等账套损益科目借贷同额（镜像结转）→ 净额=0 失真（信用减值
-                #   jf=df=-2.4M 试算表 0 vs 底稿借发 -2.4M）→ 借贷同额取借/贷发。
+                #   投资收益等借贷双方冲减 → 净额=企业报表口径）；镜像账套（XBJ/AZ）
+                #   取发生额（is_income→df、损失→jf，=底稿口径）
                 if is_income:
-                    _t = 0.0
-                    for l1, a in ent_l1[c].items():
-                        if any(k in l1 for k in kws):
-                            _d = a['df']; _j = a['jf']
-                            _m = max(abs(_d), abs(_j))
-                            _t += _d if (abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)) else (_d - _j)
-                    v = _t
+                    v = sum((a['df'] if _mirror_mode else (a['df'] - a['jf']))
+                            for l1, a in ent_l1[c].items() if any(k in l1 for k in kws))
                 else:
-                    _t = 0.0
-                    for l1, a in ent_l1[c].items():
-                        if any(k in l1 for k in kws):
-                            _d = a['df']; _j = a['jf']
-                            _m = max(abs(_d), abs(_j))
-                            _t += _j if (abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)) else (_j - _d)
-                    v = _t
+                    v = sum((a['jf'] if _mirror_mode else (a['jf'] - a['df']))
+                            for l1, a in ent_l1[c].items() if any(k in l1 for k in kws))
             _money(ws3, r, j, v)
             tot += v
         _money(ws3, r, len(comps) + 2, tot, bold=True, fill=TOT_FILL)

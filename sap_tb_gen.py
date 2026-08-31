@@ -282,6 +282,14 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         if (comp, str(code)) in _mirror_kids:
             continue   # 资产负债表镜像父级的子级 → 父级已代表全族
         l1 = _l1(name)
+        # ⚡⚡ 2026-09-01 委托贷款按期限重分类（与 AH 企业报表口径一致）：
+        #   1301010100 一年内到期→一年内到期的非流动资产；其余委托贷款（1301010000 等）
+        #   →其他非流动资产。否则试算表其他非流动资产缺 3.58B 委托贷款（只列 868K）。
+        if '委托贷款' in name:
+            if '一年内到期' in name:
+                l1 = '一年内到期的非流动资产'
+            else:
+                l1 = '其他非流动资产'
         _c4 = str(code)[:4]
         if (comp in _foreign_comps and l1 not in _l1_known
                 and _c4 in _code4_l1 and l1 != _code4_l1[_c4]):

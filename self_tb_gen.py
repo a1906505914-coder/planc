@@ -70,6 +70,10 @@ BS_ASSET_ROWS = OrderedDict([
     ('存货',            {'kw': ['库存商品', '发出商品', '原材料', '包装物', '低值易耗品', '周转材料',
                                 '在产品', '材料成本差异', '开发成本', '工程施工', '存货', '委托调拨物资']}),
     ('其他流动资产',    {'kw': ['待摊', '预付款', '预付账款']}),
+    # ⚡⚡ 2026-09-01 一年内到期的非流动资产（资产侧）：委托贷款-一年内到期（1301010100
+    #   『一年内到期的长期委托贷款』）归此行。kw 用『一年内到期的长期』避免与负债侧
+    #   『一年内到期的非流动负债』（kw=一年内到期）冲突；委托贷款其余部分归其他非流动资产。
+    ('一年内到期的非流动资产', {'kw': ['一年内到期的长期', '一年内到期的非流动']}),
     ('长期股权投资',    {'kw': ['长期股权']}),
     ('投资性房地产',    {'kw': ['投资性房地产']}),
     ('固定资产',        {'kw': ['固定资产', '临时设施']}),
@@ -237,7 +241,12 @@ def build_entity_tb(data_dir, years=None, comps=None):
                 _code = str(cd).replace('.', '').strip()
                 if not _code:
                     continue
-                ent_tb[_code] = {'name': name_first(n), 'l1': _code[:4],
+                _full_n = str(n or '')
+                # ⚡⚡ 2026-09-01 委托贷款保留完整名（含期限）——name_first 按 - 拆首段丢
+                #   『一年以上/一年内到期』，l1_agg/build_bs 无法按期限重分类（AH 4.4B）。
+                _nm = _full_n if '委托贷款' in _full_n else name_first(n)
+                ent_tb[_code] = {'name': _nm, 'l1_name': '委托贷款' if '委托贷款' in _full_n else None,
+                                 'l1': _code[:4],
                                  'qc': float(v.get('qc') or 0.0),
                                  'jf': float(v.get('jf') or 0.0),
                                  'df': float(v.get('df') or 0.0),
@@ -296,6 +305,15 @@ def build_entity_tb(data_dir, years=None, comps=None):
                 #   『其他货币资金』）：一级（无点）用父级行名，子目（有点）用自身名。
                 _nm = name_first(names.get(c, c)) or ''
                 _has_dot = '.' in str(c)
+                _fulln = str(names.get(c, c) or '')
+                # ⚡⚡ 2026-09-01 委托贷款保留完整名（含期限『一年以上/一年内到期』）——
+                #   1301 子目名被父级『委托贷款』覆盖丢期限，l1_agg/build_bs 无法按期限
+                #   重分类（4.4B 全归其他非流动，企业报表已拆 3.58B/0.84B）。
+                if '委托贷款' in _fulln:
+                    ent_tb[c] = {'name': _fulln, 'l1_name': '委托贷款', 'l1': l1,
+                                 'qc': float(v.get('qc') or 0.0), 'jf': float(v.get('jf') or 0.0),
+                                 'df': float(v.get('df') or 0.0), 'qm': float(v.get('qm') or 0.0)}
+                    continue
                 ent_tb[c] = {'name': (_nm if _has_dot else l1_names.get(l1)) or _nm,
                              # ⚡⚡ 2026-08-23 父级名（一级科目名）：l1_agg/试算表用它
                              #   显示一级行名——原 l1_agg 取第一个叶子名（1012→『承兑
@@ -314,8 +332,15 @@ def l1_agg(ent_tb):
     """按一级代码（4位）汇总叶子行 → {l1code: 值字典}（名称优先用父级行名 l1_name）。"""
     agg = OrderedDict()
     for c, v in sorted(ent_tb.items()):
-        l1 = v.get('l1') or re.sub(r'\D', '', c)[:4]
-        a = agg.setdefault(l1, {'name': v.get('l1_name') or v['name'],
+        _num = re.sub(r'\D', '', str(c))[:4]
+        l1 = v.get('l1') or _num
+        # ⚡⚡ 2026-09-01 委托贷款（1301）按期限拆：一年内到期子目（1301010100）独立成行，
+        #   build_bs 才能重分类（一年内到期→一年内到期的非流动资产；其余→其他非流动资产）。
+        #   否则聚合为一级『委托贷款』名丢失期限 → 4.4B 全归其他非流动，与企业报表口径不符。
+        if _num == '1301' and '委托贷款' in str(v.get('name') or ''):
+            l1 = str(c)
+        _nm_v = v.get('name') if (_num == '1301' and '委托贷款' in str(v.get('name') or '')) else None
+        a = agg.setdefault(l1, {'name': _nm_v or v.get('l1_name') or v['name'],
                                 'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0})
         a['qc'] += v['qc']; a['jf'] += v['jf']; a['df'] += v['df']; a['qm'] += v['qm']
     return agg

@@ -1287,6 +1287,18 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
         #   (jf-df/df-jf)：XBJ U8 科目余额表损益科目借贷同额(660246 借=贷=-2854517) → 净额 0
         #   → 审定表空壳而试算表 371M。非损益科目维持净额（资产/负债余额口径）。
         _income_stmt = bool(item.get('income_statement'))
+        # ⚡⚡ 2026-08-31 修复（AZ 泰国账套管理费用双计 42.19M=2×21.09M）：thai_mapping
+        #   normalize_thai_tb 把泰国行【复制】映射为标准码（5300→6602，保留原行）→ 泰国
+        #   管理费用同时有 5300（原行）与 6602（映射行）。codes=['6602'] 命中映射行，
+        #   名称兜底又命中原行（"管理费用"）→ 双计。泰国主体科目名经 thai_mapping 归一化
+        #   后标准码已可匹配，名称兜底对泰国主体禁用（避免原行+映射行重复计入）。
+        _t_is_thai = False
+        if for_entity is not None:
+            try:
+                from thai_mapping import is_thai_entity as _ite
+                _t_is_thai = _ite(for_entity)
+            except Exception:
+                pass
         def _pl_amt(_v, _is_credit):
             if _income_stmt:
                 return _v['df'] if _is_credit else _v['jf']
@@ -1316,11 +1328,9 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
                     tot += _pl_amt(v, is_credit)
                     continue
             # 名称兜底：仅当 编码未命中 且 名称匹配 时计入（避免双计）
-            # ⚡⚡ 2026-08-27 P0 修复：原 `str(n) == name_fallback` 精确相等，而 SAP 科目名
-            #   为『一级-二级-三级』（如 其他收益-政府补助-与收益相关）→ 恒不等 → 名称兜底
-            #   永远失效（其他收益审定表 0 根因之一）。改按一级段匹配（SAP '-' 分隔，
-            #   与 pl_detail._subject_of / 铁律5 名称主键 一致），兼容精确名/前缀带分隔符。
-            if name_fallback and (
+            # ⚡⚡ 2026-08-31 泰国主体跳过名称兜底（thai_mapping 已归一化标准码，
+            #   原行+映射行双计根因，见 _pl_amt 上方注释）
+            if name_fallback and not _t_is_thai and (
                     str(n).strip() == name_fallback
                     or str(n).startswith(name_fallback + '-')
                     or str(n).startswith(name_fallback + '　')

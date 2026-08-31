@@ -256,6 +256,24 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
             if all(abs(float(_v1.get(k) or 0.0) - _ksum[k]) < 0.005 for k in _ksum):
                 for cc in _kids:
                     _mirror_kids.add((comp, cc))
+    # ⚡⚡ 2026-09-01 AZ 外币主体（泰国/新加坡）一级名映射：折算试算表行只有明细
+    #   （1002.01 中行/外币/开泰银行，无 level==1 父级），名称非标准一级名 → 聚合后
+    #   散落成『中行』『外币』等独立行（泰国银行存款/管理费用 TB=0）。修复：从
+    #   level==1 行学 code4→一级名（1002→银行存款、6602→管理费用…），明细行名称
+    #   无法识别为已知一级名时按 code 前4位映射。
+    _code4_l1 = {}
+    _l1_known = set()
+    _has_l1 = set()
+    for (_cc, _cd, _nn, _yy), _vv in tb.items():
+        if _vv.get('level') == 1 and _nn:
+            _has_l1.add(_cc)
+            _nm1 = _l1(str(_nn))
+            _l1_known.add(_nm1)
+            _c4 = str(_cd)[:4]
+            if _c4 and _c4 not in _code4_l1:
+                _code4_l1[_c4] = _nm1
+    # 外币主体（泰国/新加坡）：折算试算表全明细行无 level==1 → 该主体无一级父行
+    _foreign_comps = {c for c in ent_l1 if c not in _has_l1}
     for (comp, code, name, yy), v in tb.items():
         if comp not in ent_l1:
             continue
@@ -264,6 +282,10 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         if (comp, str(code)) in _mirror_kids:
             continue   # 资产负债表镜像父级的子级 → 父级已代表全族
         l1 = _l1(name)
+        _c4 = str(code)[:4]
+        if (comp in _foreign_comps and l1 not in _l1_known
+                and _c4 in _code4_l1 and l1 != _code4_l1[_c4]):
+            l1 = _code4_l1[_c4]   # 外币主体明细名（中行/外币/应付薪金…）→ code4 一级名
         if str(code)[:4] == '1231':
             l1 = '坏账准备'   # 备抵科目子级名撞被备抵科目名 → 归位坏账准备
         if l1 not in _pl_kws and str(code)[:4] in _pl_pfx:

@@ -219,6 +219,22 @@ def read_km(path_or_comp=None):
     #   父级独立数据由子级承担（父=子和的镜像结构）。
     l1 = {}
     _all_c = set(entries)
+    # ⚡⚡ 2026-09-01 外币主体（泰国/新加坡）一级名映射：read_tb_full 折算行 code=标准码
+    #   但 name=泰国本地名（6601 运费/6602 工资/1002 中行），一级名精确匹配『销售费用/
+    #   管理费用/银行存款』失败 → 费用/收入/银行底稿泰国主体 0 或原币。修复：从全量 TB
+    #   的 level==1 行学 code4→标准一级名（6601→销售费用、6602→管理费用、1002→银行存款），
+    #   仅对【无 level1 行的外币主体】（泰国/新加坡折算行无 level 字段）聚合时替换名称。
+    _c4name = {}
+    _has_l1 = set()
+    try:
+        _tb_all = read_tb_full(_DATA_ROOT, None) if _DATA_ROOT else {}
+        for (_cc, _cd, _nn, _yy), _vv in _tb_all.items():
+            if _vv.get('level') == 1 and _nn:
+                _has_l1.add(_cc)
+                _c4name.setdefault(str(_cd)[:4], str(_nn).split('-')[0].split('－')[0].strip())
+    except Exception:
+        _c4name, _has_l1 = {}, set()
+    _is_foreign = bool(_has_l1) and comp not in _has_l1
     for code, v in entries.items():
         # 父级行（存在以其 code 为前缀的子级）→ 跳过聚合（防父+子双计）
         if any(code != c2 and c2.startswith(code) for c2 in _all_c):
@@ -231,6 +247,8 @@ def read_km(path_or_comp=None):
             _p = entries.get(c4)
             nm = (str(_p.get('name', '')).split('-')[0].split('－')[0].strip() if _p
                   else str(v.get('name', '')).split('-')[0].split('－')[0].strip()) or c4
+            if _is_foreign and c4 in _c4name and nm != _c4name[c4]:
+                nm = _c4name[c4]   # 外币主体：本地名（运费/工资）→ 标准一级名（销售费用/管理费用）
             l1[c4] = {'name': nm, 'odir': '借', 'opening': 0.0, 'debit': 0.0,
                       'credit': 0.0, 'fdir': '借', 'closing': 0.0, 'level': 1}
         l1[c4]['opening'] += float(v.get('qc') or 0.0)

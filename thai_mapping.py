@@ -140,6 +140,12 @@ def normalize_thai_tb(tb, entities):
                 _p, _suf = str(code).split('.', 1)
                 _std_p = thai_code_to_std(_p)
                 ncode = f'{_std_p}.{_suf}' if _std_p != _p else code
+        # ⚡⚡ 2026-09-01 修复双计根因：read_tb_full 已对泰国主体做 CNY 折算（行 code/name
+        #   已是集团标准：1122.01.01 应收账款-外销…），此处 normalize 无需再映射；若继续，
+        #   生成 key 与原行相同 → 走『金额累加』分支 → 泰国应收/费用/银行全部 2×。
+        #   仅当 code/name 确为泰国本地科目（1130 应收账款和应收票据等）才需映射。
+        if ncode == code and nname == name:
+            continue
         key = (e, ncode, nname, y)
         if key not in out:
             out[key] = dict(v)

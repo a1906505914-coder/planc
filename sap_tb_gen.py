@@ -165,6 +165,11 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     #   泰国 6602 管理费用/职工薪酬 子名不含"管理费用"→ 保留父级，防 480K 丢失）。
     #   仅对损益科目（匹配 PL_ROWS kws）；资产负债表科目不动（与底稿同源口径一致）。
     _pl_kws = {kw for _r in PL_ROWS for kw in _r[1]}
+    # ⚡⚡ 2026-08-31 AZ 跨期调整兜底：损益科目名称首段不含标准名但码同族
+    #   （AZ 6001.02『跨期收入调整』jf=df=-18.5M，一级名≠主营业务收入）→ 名称
+    #   不匹配 PL 关键词时按码前缀归入对应损益一级名（与底稿 read_km 父级口径一致）。
+    _pl_pfx = {'6001': '主营业务收入', '6051': '其他业务收入',
+               '6401': '主营业务成本', '6402': '其他业务成本'}
     _by_comp = {}
     for (comp, code, _n, _y), _v in tb.items():
         # ⚡⚡ read_tb_full 的 name 在 key（非 value）→ 需随行保存，_l1 判定依赖
@@ -189,12 +194,23 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
             _pl1 = _l1(_n1)
             if any(_pl1 in _cds[cc][1] for cc in _kids):
                 _skip.add((comp, c1))
+    # 族一级行保留集：某主体某 pfx 族有【未剔除的 level==1 行】→ 父级已在 ent_l1，
+    #   子级（名称不同，如 6051.01 光亮铜）不再 _pl_pfx 兜底归入（防父+子双计）。
+    _pl_l1_kept = set()
+    for (comp, code, name, yy), v in tb.items():
+        if (str(code)[:4] in _pl_pfx and v.get('level') == 1
+                and (comp, str(code)) not in _skip):
+            _pl_l1_kept.add((comp, str(code)[:4]))
     for (comp, code, name, yy), v in tb.items():
         if comp not in ent_l1:
             continue
         if (comp, str(code)) in _skip:
             continue   # 镜像父级（父=子和 且 子名含父级一级名）→ 剔除防双计
         l1 = _l1(name)
+        if l1 not in _pl_kws and str(code)[:4] in _pl_pfx:
+            _pfx4 = str(code)[:4]
+            if (comp, _pfx4) not in _pl_l1_kept:
+                l1 = _pl_pfx[_pfx4]   # 跨期调整等码同族科目归入损益一级名
         a = ent_l1[comp].setdefault(l1, {'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0})
         a['qc'] += v['qc']; a['jf'] += v['jf']; a['df'] += v['df']; a['qm'] += v['qm']
 

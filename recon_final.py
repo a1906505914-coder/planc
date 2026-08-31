@@ -225,6 +225,39 @@ def main():
                 print(f'    {e}: 底稿={wv:,.2f} TB={tv:,.2f}')
         except Exception:
             pass
+    # ⚡⚡ 2026-08-31 缺失底稿检查（回应"少科目没发现"根因）：recon_final 原先只核对
+    #   【已存在的底稿文件】——AH 缺银行存款（bank 未跑）时 44 科目照常全绿，无人发现缺
+    #   科目。对照 audit_common 报表科目全集（资产/负债/权益/损益），列出无底稿文件的科目。
+    try:
+        from audit_common import REPORT_ASSET, REPORT_LIAB, REPORT_EQUITY, REPORT_PL
+        _have_files = [fn.split('审计底稿')[0].strip() for fn in os.listdir(out) if fn.endswith('.xlsx')]
+        _no_note = ('营业成本', '主营业务收入', '主营业务成本', '其他业务收入', '其他业务成本',
+                    '本年利润', '研发支出', '累计折旧', '累计摊销', '临时设施摊销',
+                    '原材料', '库存商品', '周转材料', '低值易耗品', '存货跌价准备',
+                    '房地产开发成本', '待摊费用', '坏账准备', '贷款', '贷款损失准备',
+                    '抵债资产', '抵债资产跌价准备', '合同资产减值准备', '持有待售资产减值',
+                    # ⚡⚡ 2026-08-31 由其他底稿覆盖的报表科目：货币资金→银行存款底稿
+                    #   （货币资金审定表含 库存现金/银行存款/其他货币资金）；应付股利/预提费用
+                    #   → 其他应付款底稿（recon_final MERGE 并入）
+                    '其他货币资金', '应付股利', '预提费用', '内部结算中心存款')
+
+        def _has_note(_s):
+            # 底稿文件匹配（应付职工薪酬 ↔ 职工薪酬 等前缀差）
+            return any(_s in hf or hf in _s for hf in _have_files)
+
+        def _tb_zero(_s):
+            # 试算表该科目全主体 0（无数据）→ 无需底稿
+            _r = tb_rows.get(_s)
+            if not _r:
+                return True
+            return not any(abs(x) > 0.005 for x in _r.values() if isinstance(x, (int, float)))
+
+        _missing = [s for s in REPORT_ASSET + REPORT_LIAB + REPORT_EQUITY + REPORT_PL
+                    if not _has_note(s) and s not in _no_note and not _tb_zero(s)]
+        if _missing:
+            print(f'⚠️ 报表科目有数据但缺底稿文件（未生成/未核对）: {" / ".join(_missing)}')
+    except Exception:
+        pass
     print(f'\n一致/符号口径 {n_ok} 个 / 真实差异 {n_real} 个')
     return 0 if n_real == 0 else 1
 

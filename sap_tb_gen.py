@@ -206,11 +206,16 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     ws.append(['科目名称'] + comps + ['集团合计'])
     for c in ws[1]:
         c.font = HEAD_FONT; c.fill = HEAD_FILL; c.alignment = CTR; c.border = BORDER
-    # 科目排序：资产类在前（一级名自然序）
+    # 科目排序：资产→负债→权益→损益 报表顺序（用户方法论，audit_common.sort_report_names）
     l1_names = set()
     for c in comps:
         l1_names.update(ent_l1[c].keys())
-    for i, l1 in enumerate(sorted(l1_names), start=2):
+    try:
+        from audit_common import sort_report_names as _srn
+        _ordered = _srn(list(l1_names))
+    except Exception:
+        _ordered = sorted(l1_names)
+    for i, l1 in enumerate(_ordered, start=2):
         _txt(ws, i, 1, l1)
         tot = 0.0
         for j, c in enumerate(comps, start=2):

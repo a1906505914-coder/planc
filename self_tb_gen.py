@@ -157,6 +157,43 @@ IS_ROWS = OrderedDict([
 
 # ---------------------------------------------------------------- 主构建
 _SAP_MODE = False    # 模块级标志：SAP 账套（AH 等）build_is 按名称匹配（铁律130b，2026-08-15）
+# ⚡⚡ 2026-09-01 AH 6600 期间费用总池拆分：SAP 账套费用全在 6600（无 6601/6602/6604 独立
+#   科目），IS_ROWS 管理费用 debit 含 6600 → 全集团期间费用 6.6B 误归管理费用。修复：
+#   有费用目录/企业报表的账套（AH）用费用目录拆分值覆盖管理/销售/研发费用。
+_FEE_SCOPE = None    # {ent: {类别: 金额}}（费用目录 6600 池功能范围拆分）
+
+
+def _load_fee_scope(data_dir, comps):
+    """读账套费用目录（6600 池功能范围拆分，=TB 拆分形态），与 sap_tb_gen/expense_detail 同源。
+    仅对 SAP 且存在企业报表的账套（AH）返回非空；其他账套返回 {}（行为不变）。"""
+    try:
+        import sap_report as _RPT
+        if not _RPT.has_enterprise_reports(data_dir):
+            return {}
+    except Exception:
+        return {}
+    try:
+        import sap_reader as _SR
+        if not _SR.detect_sap_layout(data_dir):
+            return {}
+    except Exception:
+        return {}
+    out = {}
+    _fs_cats = ('管理费用', '销售费用', '研发费用', '制造费用')
+    try:
+        import sap_report as _RPT
+        for c in (comps or []):
+            _fs = _RPT.read_fee_scope(data_dir, c)
+            _pl = _RPT.read_ent_profit(data_dir, c)
+            for _cat in ('管理费用', '销售费用', '研发费用'):
+                if (_cat not in _fs and _pl
+                        and abs(float(_pl.get(_cat, 0.0))) > 0.005):
+                    _fs.setdefault(_cat, [(f'{_cat}（企业报表）', float(_pl.get(_cat, 0.0)))])
+            if _fs:
+                out[c] = {k: sum(v for _, v in items) for k, items in _fs.items()}
+    except Exception:
+        return {}
+    return out
 
 
 def _is_sap(data_dir):
@@ -460,10 +497,15 @@ def build_equity_sheet_gl(ent_tb_all, yy, data_dir):
     return out
 
 
-def build_is(ent_tb_all, yy):
+def build_is(ent_tb_all, yy, data_dir=None):
     """利润表：收入取贷方发生额/费用取借方发生额（铁律3：损益 gross）。
     ⚡ 铁律130b（SAP 模式）：SAP 内部码 ≠ 标准码（6010收入/64xx成本/66xx费用），
-    IS_ROWS 的 code 前缀对 SAP 无效 → 按 cfg.kw 名称关键词匹配（ga 之外 AH 实证）。"""
+    IS_ROWS 的 code 前缀对 SAP 无效 → 按 cfg.kw 名称关键词匹配（ga 之外 AH 实证）。
+    ⚡⚡ 2026-09-01 AH 6600 期间费用总池：data_dir 给定且 _FEE_SCOPE 未设置时懒加载
+       费用目录拆分（audit_merge 经 build_is 生成横展表也走此路径）。"""
+    global _FEE_SCOPE
+    if _FEE_SCOPE is None and data_dir and _is_sap(data_dir):
+        _FEE_SCOPE = _load_fee_scope(data_dir, list(ent_tb_all)) or {}
     global _SAP_MODE
     ent_is = {}
     for ent, tb in ent_tb_all.items():
@@ -493,6 +535,12 @@ def build_is(ent_tb_all, yy):
                     if cfg.get('debit'):
                         tot += v['jf']
             rows[rn] = tot
+            # ⚡⚡ 2026-09-01 6600 期间费用总池拆分：有费用目录/企业报表的主体用拆分值覆盖
+            #   （AH 管理费用 6.6B 误归 → 663M 正确值；其他账套 _FEE_SCOPE 为空不受影响）
+            if rn in ('管理费用', '销售费用', '研发费用') and _FEE_SCOPE:
+                _fse = _FEE_SCOPE.get(ent, {}).get(rn)
+                if _fse is not None:
+                    rows[rn] = _fse
         # ⚡⚡ 2026-08-15 XBJ 无 6001 主体收入兜底（与 revenue_detail 一致）：
         #   收入科目只有『合同结算\价款结算』(123301) 的主体，其【贷方正数】=本期收入确认
         #   （38 个无 6001 主体实证：123301贷=123302借=收入）；负贷方=停用/红字冲销（非收入）。
@@ -825,6 +873,10 @@ def main(argv):
     data_dir = a.folder
     comps = [x.strip() for x in a.comps.split(',') if x.strip()] if a.comps else None
     ent_tb_all, years = build_entity_tb(data_dir, [a.year] if a.year else None, comps=comps)
+    global _FEE_SCOPE
+    _FEE_SCOPE = _load_fee_scope(data_dir, list(ent_tb_all)) if _is_sap(data_dir) else None
+    if _FEE_SCOPE:
+        print(f'  ⚡ 6600 期间费用总池按费用目录拆分（{len(_FEE_SCOPE)} 主体）')
     out = a.out or os.path.join(data_dir, '自建试算表_%s.xlsx' % years[0])
     write_workbook(out, ent_tb_all, years)
     print('自建试算表已生成: %s' % out)

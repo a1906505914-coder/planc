@@ -95,7 +95,7 @@ def build_merge_workbook(data_dir, out_dir=None, years=None, quiet=False, entity
             import self_tb_gen as _STG2
             _ent_tb2, _yrs2 = _STG2.build_entity_tb(data_dir, [yy], comps=entity_whitelist)
             _ent_bs2, _unmatched2 = _STG2.build_bs(_ent_tb2, yy)
-            _ent_is2 = _STG2.build_is(_ent_tb2, yy)
+            _ent_is2 = _STG2.build_is(_ent_tb2, yy, data_dir=data_dir)   # ⚡ 6600 费用总池拆分
             _BS2 = [rn for rn in _STG2.BS_ASSET_ROWS] + \
                    [rn for rn in _STG2.BS_LIAB_ROWS] + \
                    [rn for rn in _STG2.BS_EQUITY_ROWS]

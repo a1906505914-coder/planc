@@ -1120,6 +1120,9 @@ def _prep_group(ent, km, gl, gkey):
     rec['accum_inc'], rec['accum_dec'] = _grp_breakdown(gl, gkey, 'accum')
     rec['impair_inc'], rec['impair_dec'] = _grp_breakdown(gl, gkey, 'impair')
     rec['cost_l2'] = [(c, km[c]) for c in km if cost and c.startswith(cost) and c != cost
+                      # ⚡⚡ 2026-09-01 ONCA 委托贷款排除『一年内到期』（附注/审定表同源）
+                      and not (gkey == 'ONCA' and str(cost) == '1301'
+                               and '一年内到期' in str(km[c].get('name') or ''))
                       and not (impair and c.startswith(impair))]
     # 2026-08-02 附注披露所需：累计折旧/摊销 与 减值准备 的二级明细
     rec['accum_l2'] = [(c, km[c]) for c in km if accum and c.startswith(accum) and c != accum]

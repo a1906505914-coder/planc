@@ -458,7 +458,12 @@ def read_tb_full(data_dir, entities=None, year='2026'):
                 import audit_common as _AU
                 _rtb_u8 = getattr(_AU, '_read_tb_full_orig', None) or _AU.read_tb_full
                 # ⚡⚡ 原始 U8 read_tb_full 需 entities（None 会 .items() 抛错）→ 传 discover 主体
-                tb = _rtb_u8(_d, discover_entities(_d))
+                # ⚡⚡ 2026-08-31 修复（XBJ revenue 审定表 0 根因）：原 `discover_entities(_d)`
+                #   在单主体驱动（current_comp=01）时被过滤为 {01} → U8 只读 01 → 缓存
+                #   (XBJ,'2026') 仅含 01 → 后续所有主体（0237+）过滤后全空 → revenue 主营
+                #   收入全 0。必须用【原始 U8 discover】（不受 current_comp 过滤）读全量。
+                _de_u8 = getattr(_AU, '_discover_entities_orig', None) or _AU.discover_entities
+                tb = _rtb_u8(_d, _de_u8(_d))
             except Exception:
                 tb = {}
         _CACHE_TB[key] = tb

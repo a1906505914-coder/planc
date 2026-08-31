@@ -1404,8 +1404,11 @@ def build_subject_rows(code, years, gl, tb_l2_names, tb_l2_control, tb_l3_names,
     # （2026-08-01 修复 #15：Z 母公司 6604 研发费用 有 6→8→10→12 四级，旧逻辑把 10/12位 当二级，
     #   且 6位父级与 8位子级同列 → TB 合计虚增 3 倍）。
     # ⚡ 2026-08-26 研发费用(660006)二级 key 用完整 10 位码 → 此处放行 660006 前缀（否则研发二级全被滤掉）
+    # ⚡⚡ 2026-09-01 费用目录二级（F- 前缀，len>6）也放行——AH 6600 总池费用目录拆分产生的
+    #   'F-工资附加费合计：' 等二级（43.6M+7.8M+4.7M）若被过滤 → 附注汇总合计 270.7M vs
+    #   审定 326.8M 差 56.1M（工资附加费/职工福利费/差旅费 全丢）。
     l2 = {cn: nm for cn, nm in l2_all.items()
-          if len(str(cn)) <= 6 or str(cn).startswith(_RD_CODE)}
+          if len(str(cn)) <= 6 or str(cn).startswith(_RD_CODE) or str(cn).startswith('F-')}
     # 孤儿深层(无6位父级的8位+)提升为顶层（父级缺失场景，如某些账套直接从8位开始）
     for cn, nm in l3.items():
         if cn[:6] not in l2 and len(str(cn)) > 6:

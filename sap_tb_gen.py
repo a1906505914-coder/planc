@@ -156,9 +156,18 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     ent_l1 = {}
     for c in comps:
         ent_l1[c] = {}
+    # ⚡⚡ 2026-08-31 修复（AZ 泰国账套试算表父+子双计根因）：U8 科目余额表含
+    #   【父级行】（6801 所得税费用）+【末级行】（6801.01 当期所得税费用）同额 →
+    #   原遍历全部行按一级名聚合 → 父+子双计（上分所得税 60,058=2×30,029，试算表 vs
+    #   底稿审定表(末级 30,029) 差 0.5×）。先收集末级行（无子级以其 code 为前缀），只聚合末级。
+    _all_codes = {c for (_c, c, _n, _y) in tb}
+    _leaf_codes = {c for c in _all_codes
+                   if not any(c != c2 and c2.startswith(c) for c2 in _all_codes)}
     for (comp, code, name, yy), v in tb.items():
         if comp not in ent_l1:
             continue
+        if code not in _leaf_codes:
+            continue   # 父级行（有末级后代）→ 剔除，只计末级叶子
         l1 = _l1(name)
         a = ent_l1[comp].setdefault(l1, {'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0})
         a['qc'] += v['qc']; a['jf'] += v['jf']; a['df'] += v['df']; a['qm'] += v['qm']

@@ -128,12 +128,46 @@ def main():
                     if _r0[1] and any(k in str(_r0[1]) for k in ('原值', '累计折旧', '减值准备', '净值', '账面')):
                         is_struct_b = True
                     break
+            # ⚡⚡ 2026-08-31 结构D-往来汇总包（AZ 泰国账套往来科目）：表头含『汇总包顺序』
+            #   列，row[0]=顺序号、row[1]=公司 → 用 row[1] 当主体。
+            #   ⚡⚡ 取『期末余额』列（非审定数——AZ 汇总包审定数含审计重分类调整，
+            #   如上分 期末 2,184,784 + 重分类 2,109,574 = 审定数 4,294,358，应对比 TB 期末）
+            is_struct_pkg = bool(rws[hi]) and any('汇总包' in str(c) for c in rws[hi])
+            if is_struct_pkg:
+                for _j, _h in enumerate(rws[hi]):
+                    if _h and '期末余额' in str(_h):
+                        ci = _j
+                        break
+            # ⚡⚡ 2026-08-31 结构C-科目×主体（货币资金等）：表头含『科目』列，数据行
+            #   row[0]=科目名、row[1]=主体名 → 按 row[1] 聚合主体值（row[0] 筛 subj）
+            is_struct_ce = False
+            if not is_struct_b and not is_struct_pkg:
+                for _r0 in rws[hi + 1:]:
+                    if _r0 and _r0[0] and _r0[1]:
+                        if str(_r0[1]).strip() in ('合计', '全集团合计'):
+                            break
+                        is_struct_ce = not str(_r0[0]).strip().isdigit() and bool(_r0[1])
+                        break
             wp = {}
             for r in rws[hi + 1:]:
                 if not r or not r[0] or str(r[0]).strip() in ('合计', '总计', '全集团合计', '集团加计'):
                     continue
                 e = str(r[0]).strip()
-                if is_struct_b:
+                if is_struct_pkg:
+                    _ent = str(r[1]).strip() if r[1] else ''
+                    if not _ent or _ent in ('合计', '全集团合计'):
+                        continue
+                    if len(r) > ci and isinstance(r[ci], (int, float)):
+                        wp[_ent] = wp.get(_ent, 0.0) + r[ci]
+                elif is_struct_ce:
+                    _sk = str(r[0]).strip()
+                    _ent = str(r[1]).strip() if r[1] else ''
+                    if not _ent or _ent in ('合计', '全集团合计', '小计'):
+                        continue
+                    if _sk == subj or _sk.endswith(subj) or subj in _sk:
+                        if len(r) > ci and isinstance(r[ci], (int, float)):
+                            wp[_ent] = wp.get(_ent, 0.0) + r[ci]
+                elif is_struct_b:
                     # 只取『原值』项目行
                     if r[1] and '原值' in str(r[1]) and len(r) > ci and isinstance(r[ci], (int, float)):
                         wp[e] = wp.get(e, 0.0) + r[ci]

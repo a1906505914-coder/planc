@@ -672,13 +672,33 @@ def _code_of(tb_year, which):
     return _detect_codes(tb_year).get(which) or _STD.get(which)
 
 
-def _tb_total(tb_year, which, kind):
+# 模块级损益口径模式：None=自动（单主体同额比例）；False=真实账套（AH 有企业报表，
+# 损益取净额，同额行=0）；True=镜像账套（XBJ/AZ 无企业报表，损益同额行取发生额）。
+_MIRROR_MODE = None
+
+
+def _tb_total(tb_year, which, kind, mirror=None):
     """TB 中某收入/成本科目(一级)的本期借或贷合计(gross)。which: rev/cost/orev/ocost。
     ⚡⚡ 2026-08-15：支持 _detect_codes 返回的 'prefix:key' 标记——无父级 TB
     （ga 60011601 等末级行）按名称前缀聚合（收入取贷/成本取借；结转行方向相反自然排除）；
-    cost 多前缀（主营业务成本+合同履约成本 都算，XBJ 各主体成本体系不一）。"""
+    cost 多前缀（主营业务成本+合同履约成本 都算，XBJ 各主体成本体系不一）。
+    ⚡⚡ 2026-09-01 mirror 镜像账套（损益科目借贷同额复制，XBJ/AZ）→ 同额行取发生额
+    （收入贷方、成本借方，=底稿口径）；真实账套（AH）→ 一律净额（同额行=0，企业报表
+    口径——AH 2680 其他业务 605103 技术服务费 jf=df=1.98M，底稿取 df 6.37M vs 企业
+    报表 3.39M 差 3M 根因）。mirror=None 时按主体损益同额比例自动判断。"""
     if not tb_year:
         return 0.0
+    if mirror is None:
+        mirror = _MIRROR_MODE
+    if mirror is None:
+        _probe = []
+        for _v in tb_year.values():
+            _c = float(_v.get('credit') or 0.0)
+            _d = float(_v.get('debit') or 0.0)
+            if _c or _d:
+                _m = max(abs(_c), abs(_d))
+                _probe.append(abs(_c - _d) < 0.005 or (_m > 0 and abs(_c - _d) / _m < 0.02))
+        mirror = bool(_probe) and sum(_probe) / len(_probe) > 0.8
     code = _code_of(tb_year, which)
     if not code:
         return 0.0
@@ -740,22 +760,29 @@ def _tb_total(tb_year, which, kind):
                 _d = float(v.get('debit') or 0.0)
                 if '（GL）' in nm or '（GL' in nm:
                     tot += _c - _d   # GL 流水行净额（AH 6001 GL 行 3.69B−3.01B）
-                elif abs(_c - _d) > 0.005:
-                    tot += _c - _d   # 有借方冲减（AH 其他业务收入退回）→ 净额
+                elif mirror and abs(_c - _d) < 0.005:
+                    tot += _c        # 镜像账套（XBJ）借贷同额 → 取贷方
                 else:
-                    tot += _c        # 借贷同额（XBJ U8 镜像）→ 取贷方
+                    tot += _c - _d   # 真实账套（AH）一律净额，同额行=0
             else:
                 # ⚡⚡ 2026-08-31 成本口径：AH 6401 制造成本有真实贷方冲减（debit 2.80B/
                 #   credit 0.34B → 净额 2.55B=企业报表）；XBJ U8 成本科目借贷同额
                 #   （debit==credit 镜像）→ 取借方（=利润表）。区分：借贷不同取净额。
                 _d = float(v.get('debit') or 0.0)
                 _c = float(v.get('credit') or 0.0)
-                tot += (_d - _c) if abs(_d - _c) > 0.005 else _d
+                tot += _d if (mirror and abs(_d - _c) < 0.005) else (_d - _c)
         return tot
     v = tb_year.get(code)
     if not v:
         return 0.0
-    return v['credit'] if kind == 'cr' else v['debit']
+    # ⚡⚡ 2026-09-01 精确码分支也用镜像口径（AH 2680 orev 6051 键 credit6.37M/debit2.98M
+    #   = 同额行1.98+1.00 保留 + 净额3.39，净额口径应返回 3.39M；原直接返回 credit 6.37M
+    #   vs 企业报表 3.39M 差 3M）
+    _c = float(v.get('credit') or 0.0)
+    _d = float(v.get('debit') or 0.0)
+    if kind == 'cr':
+        return _c if mirror else (_c - _d)
+    return _d if mirror else (_d - _c)
 
 
 # ===================== 样式辅助 =====================
@@ -2420,7 +2447,16 @@ def build_rev_counterparty_sheet(wb, cur_year, entities=None, data_dir=None):
 
 
 def build_revenue_workbook(data_dir):
+    global _MIRROR_MODE
     print(f'>> 处理文件夹：{data_dir}')
+    # ⚡⚡ 2026-09-01 损益口径模式：有企业报表目录（AH 账套导出）→ 真实账套（净额，
+    #   同额行=0，AH 2680 其他业务 605103 jf=df 取净额=企业报表 3.39M）；无报表
+    #   （XBJ/AZ）→ 镜像账套（同额行取发生额，XBJ 主营收入 547M）。
+    try:
+        import sap_report as _RPT
+        _MIRROR_MODE = not bool(_RPT.has_enterprise_reports(data_dir))
+    except Exception:
+        _MIRROR_MODE = None
     entities = _discover_entities(data_dir)
     if not entities:
         print('  ❌ 未发现任何账套主体（需含《科目余额表》+《综合查询明细表》）。')

@@ -239,14 +239,19 @@ def read_km(path_or_comp=None):
         # ⚡⚡ 2026-08-31 借贷不同 → 取净额（AH 父级 6001010000 cr2.48B/db0、
         #   GL 流水 6001010001 cr3.69B/db3.01B → 净额；成本 6401 db2.80B/cr0.34B）；
         #   借贷同额（XBJ U8 镜像 cr=db）→ 原样保留（防清零）。
-        if abs(_cr - _db) > 0.005:
+        #   ⚡⚡ 2026-09-01 相对阈值（AZ 物联 6001.01 jf≠df 但差 0.007% = 镜像复制行，
+        #   净额化 → credit=0 主营收入丢 157.6M）：绝对同额或相对差<2% → 保留原值；
+        #   真实借贷冲减（AH GL 流水差 18%）→ 净额。
+        _m = max(abs(_cr), abs(_db))
+        _mirror = abs(_cr - _db) < 0.005 or (_m > 0 and abs(_cr - _db) / _m < 0.02)
+        if _mirror:
+            l1[c4]['debit'] += _db
+            l1[c4]['credit'] += _cr
+        else:
             if abs(_cr) > abs(_db):
                 l1[c4]['credit'] += _cr - _db
             else:
                 l1[c4]['debit'] += _db - _cr
-        else:
-            l1[c4]['debit'] += _db
-            l1[c4]['credit'] += _cr
         l1[c4]['closing'] += float(v.get('qm') or 0.0)
     for c4, v in l1.items():
         v['odir'] = '借' if v['opening'] >= 0 else '贷'

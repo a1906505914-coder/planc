@@ -579,7 +579,7 @@ def _aggregate(path):
 _REV_NAMES = ('主营业务收入',)
 _COST_NAMES = ('主营业务成本', '合同履约成本')
 _OREV_NAMES = ('其他业务收入',)
-_OCOST_NAMES = ('其他业务成本',)
+_OCOST_NAMES = ('其他业务成本', '其他业务支出')   # ⚡⚡ 2026-09-01 AZ 6402 名『其他业务支出』
 _STD = {'rev': REV_CODE, 'cost': COST_CODE, 'orev': OREV_CODE, 'ocost': OCOST_CODE}
 _NAME_MAP = {'rev': _REV_NAMES, 'cost': _COST_NAMES, 'orev': _OREV_NAMES, 'ocost': _OCOST_NAMES}
 # ⚡⚡ 2026-08-15 无父级 TB 名称前缀兜底（ga 60011601『主营业务收入\环保业务收入\…』实证）。

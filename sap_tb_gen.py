@@ -143,16 +143,34 @@ def _rev_cost_agg(comp, tb, year, prefix, is_income):
     ⚡⚡ 2026-09-01 补：借贷同额（镜像结转，XBJ 收入/成本 jf=df 同额）→ 净额=0 失真
     → 同额取发生额（收入 df、成本 jf，=底稿/利润表口径）。"""
     tot = 0.0
-    for (cc_, cd_, nm_, yy_), v_ in tb.items():
-        if cc_ != comp or str(yy_) != str(year):
+    rows = [(str(cd_), nm_, v_) for (cc_, cd_, nm_, yy_), v_ in tb.items()
+            if cc_ == comp and str(yy_) == str(year) and str(cd_).startswith(prefix)]
+    # ⚡⚡ 2026-09-01 镜像父级排除（AZ 6001 父级=子和同额 → 父+子双计 2×）：有子级
+    #   且金额=子级之和的父级行跳过，只计末级叶子（与 revenue._tb_total 一致）。
+    _codes = [r[0] for r in rows]
+    _excl = set()
+    for _c in _codes:
+        _kids = [_c2 for _c2 in _codes if _c2 != _c and _c2.startswith(_c)]
+        if not _kids:
             continue
-        if str(cd_).startswith(prefix):
-            _d = float(v_.get('df') or 0.0)
-            _j = float(v_.get('jf') or 0.0)
-            if is_income:
-                tot += _d if abs(_d - _j) < 0.005 else (_d - _j)
-            else:
-                tot += _j if abs(_d - _j) < 0.005 else (_j - _d)
+        _s = sum(float(r[2].get('df') or 0.0) for r in rows if r[0] in _kids)
+        _pv = next((float(r[2].get('df') or 0.0) for r in rows if r[0] == _c), 0.0)
+        if abs(abs(_pv) - abs(_s)) < 1.0:
+            _excl.add(_c)
+    for cd_, nm_, v_ in rows:
+        if cd_ in _excl:
+            continue
+        _d = float(v_.get('df') or 0.0)
+        _j = float(v_.get('jf') or 0.0)
+        # ⚡⚡ 2026-09-01 镜像/接近判断（AZ 物联 6001 jf≠df 但差 0.007% → 镜像，取贷方）：
+        #   绝对同额 或 相对差<2%（镜像复制行）→ 取发生额（收入 df、成本 jf）；
+        #   真实借贷冲减（AH GL 流水差 18%）→ 取净额。
+        _m = max(abs(_d), abs(_j))
+        _mirror = abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)
+        if is_income:
+            tot += _d if _mirror else (_d - _j)
+        else:
+            tot += _j if _mirror else (_j - _d)
     return tot
 
 
@@ -370,7 +388,8 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
                 for l1, a in ent_l1[c].items():
                     if any(k in l1 for k in kws):
                         _d = a['df']; _j = a['jf']
-                        _t += _j if abs(_d - _j) < 0.005 else (_j - _d)
+                        _m = max(abs(_d), abs(_j))
+                        _t += _j if (abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)) else (_j - _d)
                 v = _t
             else:
                 # ⚡⚡ 2026-08-31 损益科目取净额（AH 信用减值/资产减值/其他收益/
@@ -382,14 +401,16 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
                     for l1, a in ent_l1[c].items():
                         if any(k in l1 for k in kws):
                             _d = a['df']; _j = a['jf']
-                            _t += _d if abs(_d - _j) < 0.005 else (_d - _j)
+                            _m = max(abs(_d), abs(_j))
+                            _t += _d if (abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)) else (_d - _j)
                     v = _t
                 else:
                     _t = 0.0
                     for l1, a in ent_l1[c].items():
                         if any(k in l1 for k in kws):
                             _d = a['df']; _j = a['jf']
-                            _t += _j if abs(_d - _j) < 0.005 else (_j - _d)
+                            _m = max(abs(_d), abs(_j))
+                            _t += _j if (abs(_d - _j) < 0.005 or (_m > 0 and abs(_d - _j) / _m < 0.02)) else (_j - _d)
                     v = _t
             _money(ws3, r, j, v)
             tot += v

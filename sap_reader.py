@@ -479,6 +479,13 @@ def read_sap_tb(data_dir, entities, year='2026'):
     import openpyxl
     tb = {}
     layout = detect_sap_layout(data_dir)
+    # ⚡⚡ 2026-08-31 修复（AZ 泰国 U8 账套 current_account 报错）：detect_sap_layout
+    #   对 AZ 返回 None（U8 窄表，9 列科目余额表）→ 原落通用分支（547+）按 SAP 宽表
+    #   固定列 r[9]/r[12]/r[13] 解析 → 越界读『借』方向列 → ValueError。U8 账套
+    #   read_sap_tb 应直接返回空，由 read_tb_full 的 U8 回退（_read_tb_full_orig +
+    #   probe_tb_columns）正确解析。
+    if layout is None:
+        return {}
     # ⚡ 2026-08-10 300 形态：11 列汇总式科目余额表（一行一科目）
     # col0公司代码/col1总账科目(10位)/col2科目长文本/col3期初金额/col4期初方向/
     # col5本期借(=1-7月累计)/col6本期贷/col7本年累计借/col8本年累计贷/col9期末余额/col10期末方向

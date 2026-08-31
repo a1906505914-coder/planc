@@ -319,14 +319,20 @@ def read_all_tb(data_dir, entities, years):
                         tb_l1_control[_k1] = tb_l1_control.get(_k1, 0.0) + float(v.get('debit') or 0.0)
                 elif len(code) >= 6:
                     c4 = code[:4]
-                    if c4 in {str(v) for v in EXPENSE_CATS.values()}:
+                    # ⚡⚡ 2026-08-31 修复（AH 研发费用底稿 0 vs 试算表 119M）：AH SAP 无
+                    #   独立 6604 研发费用，研发费用在 660006 研究开发费（c4='6600' 期间费用
+                    #   总池码，不在 EXPENSE_CATS 值集）→ 原 c4 检查挡住 → tb_l2_control 无
+                    #   研发费用 → 底稿全 0。放行 _RD_CODE(660006) 前缀，映射到标准码 6604。
+                    if c4 in {str(v) for v in EXPENSE_CATS.values()} or code.startswith(_RD_CODE):
                         # ⚡ 2026-08-26 研发费用二级细分：660006 前缀的 8/10 位子目（直接投入/人员人工等）
                         #   c6 截断全是 '660006' → 二级合并成一行、Q-TB 填全部。改用完整科目码作二级 key。
                         c6 = code if code.startswith(_RD_CODE) else code[:6]
                         nm6 = '-'.join(nm.split('-')[:2]) if '-' in nm else nm
                         # ⚡ 2026-08-10 key 类型统一：U8 分支用 int 码（EXPENSE_CATS 值），
                         # SAP 分支原用 str(c4) → build_subject_rows.get(6603) 落空 → 明细表空壳
-                        _ci = int(c4) if c4.isdigit() else 0
+                        # ⚡⚡ 2026-08-31 660006 研究开发费 → 归研发费用标准码 6604（与
+                        #   _write_sap_fee_audit 的 code=6604 匹配）
+                        _ci = EXPENSE_CATS['研发费用'] if code.startswith(_RD_CODE) else (int(c4) if c4.isdigit() else 0)
                         tb_l2_names[_ci].setdefault(c6, nm6)
                         # ⚡ 2026-08-10 修复：二级借发控制数（明细表 TB 列依赖）——
                         # 原 SAP 分支只建 tb_l2_names、漏 tb_l2_control → 明细表(change_compare)
@@ -338,8 +344,13 @@ def read_all_tb(data_dir, entities, years):
                         #   注意：这里只遍历 len(code)>=6（末级），不含一级父行，天然无双计。
                         for y in years:
                             _k2 = (e, _ci, c6, str(y))
-                            tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + (
-                                float(v.get('debit') or 0.0) - float(v.get('credit') or 0.0))
+                            # ⚡⚡ 2026-08-31 研发费用（660006）取【借发 debit】（与 sap_tb_gen
+                            #   利润表研发费用=借发口径一致）：原统一净额（debit-credit）在 660006
+                            #   有贷方冲减（AH 1010 df=546K）时底稿 102.5M vs 试算表 103.0M 差 0.55M。
+                            #   制造费用等保留净额（内部分摊冲减设计，其试算表同用净额/无冲减）。
+                            _amt = (float(v.get('debit') or 0.0) if code.startswith(_RD_CODE)
+                                    else float(v.get('debit') or 0.0) - float(v.get('credit') or 0.0))
+                            tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + _amt
                         if len(code) >= 8:
                             tb_l3_names[_ci].setdefault(code, nm)
         return name2code, code2name, tb_l2_names, tb_l2_control, tb_l1_control, tb_l3_names

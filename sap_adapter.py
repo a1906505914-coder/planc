@@ -234,8 +234,19 @@ def read_km(path_or_comp=None):
             l1[c4] = {'name': nm, 'odir': '借', 'opening': 0.0, 'debit': 0.0,
                       'credit': 0.0, 'fdir': '借', 'closing': 0.0, 'level': 1}
         l1[c4]['opening'] += float(v.get('qc') or 0.0)
-        l1[c4]['debit'] += float(v.get('jf') or 0.0)
-        l1[c4]['credit'] += float(v.get('df') or 0.0)
+        _cr = float(v.get('df') or 0.0)
+        _db = float(v.get('jf') or 0.0)
+        # ⚡⚡ 2026-08-31 借贷不同 → 取净额（AH 父级 6001010000 cr2.48B/db0、
+        #   GL 流水 6001010001 cr3.69B/db3.01B → 净额；成本 6401 db2.80B/cr0.34B）；
+        #   借贷同额（XBJ U8 镜像 cr=db）→ 原样保留（防清零）。
+        if abs(_cr - _db) > 0.005:
+            if abs(_cr) > abs(_db):
+                l1[c4]['credit'] += _cr - _db
+            else:
+                l1[c4]['debit'] += _db - _cr
+        else:
+            l1[c4]['debit'] += _db
+            l1[c4]['credit'] += _cr
         l1[c4]['closing'] += float(v.get('qm') or 0.0)
     for c4, v in l1.items():
         v['odir'] = '借' if v['opening'] >= 0 else '贷'

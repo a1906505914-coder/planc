@@ -71,6 +71,7 @@ if _bs_os.environ.get('AUDIT_NO_RELAUNCH') != '1':
 
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import sap_report as RPT   # ⚡⚡ 2026-08-31 费用目录（功能范围拆分）读取
 # 统一外壳样式与加载逻辑（六程序共享）：蓝头 1F4E78 / 千分位 / 边框 / 中央 audit_templates/
 from audit_shell import (
     SHELL_HFILL, SHELL_HFONT, SHELL_SUB_FONT, SHELL_BOLD, SHELL_NUM, SHELL_THIN,
@@ -302,9 +303,18 @@ def read_all_tb(data_dir, entities, years):
         for _cat, _code in EXPENSE_CATS.items():
             name2code[_cat] = _code
             code2name[_code] = _cat
+        # ⚡⚡ 2026-08-31 AH 类账套功能范围拆分：6600 期间费用总池（工资及奖金等）无
+        #   管理/销售/研发/制造独立科目 → 读账套费用目录 费用/{e}/{类别}N.xlsx
+        #   （N=最新月份累计；每文件『合计：』行=企业利润表科目，已验证精确一致）。
+        _fee_scope = {}
+        for e in entities:
+            _fs = RPT.read_fee_scope(data_dir, e)
+            if _fs:
+                _fee_scope[e] = _fs
         for e, yd in entities.items():
             km = _adapter.read_km(e)
             l2map = {}
+            _use_fee = e in _fee_scope
             for code, v in km.items():
                 lv = v.get('level')
                 nm = str(v.get('name') or '')
@@ -319,6 +329,10 @@ def read_all_tb(data_dir, entities, years):
                         tb_l1_control[_k1] = tb_l1_control.get(_k1, 0.0) + float(v.get('debit') or 0.0)
                 elif len(code) >= 6:
                     c4 = code[:4]
+                    # ⚡⚡ 2026-08-31 有费用目录的主体：6600 总池行跳过（功能范围拆分
+                    #   到费用目录，TB 一级名聚合无法拆分管理/销售/研发/制造）
+                    if _use_fee and c4 == '6600':
+                        continue
                     # ⚡⚡ 2026-08-31 修复（AH 研发费用底稿 0 vs 试算表 119M）：AH SAP 无
                     #   独立 6604 研发费用，研发费用在 660006 研究开发费（c4='6600' 期间费用
                     #   总池码，不在 EXPENSE_CATS 值集）→ 原 c4 检查挡住 → tb_l2_control 无
@@ -353,6 +367,20 @@ def read_all_tb(data_dir, entities, years):
                             tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + _amt
                         if len(code) >= 8:
                             tb_l3_names[_ci].setdefault(code, nm)
+            # ⚡⚡ 2026-08-31 费用目录（功能范围拆分）→ tb_l2_control：科目名作二级
+            #   key（无科目码），金额=本期累计。管理/销售/研发/制造费用底稿审定表
+            #   (_write_sap_fee_audit 按 code 汇总) 与明细表(按二级名) 同源。
+            if _use_fee:
+                for cat, items in _fee_scope[e].items():
+                    _ci = EXPENSE_CATS.get(cat)
+                    if _ci is None:
+                        continue
+                    for nm, amt in items:
+                        c6 = f'F-{nm}'
+                        tb_l2_names[_ci].setdefault(c6, nm)
+                        for y in years:
+                            _k2 = (e, _ci, c6, str(y))
+                            tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + amt
         return name2code, code2name, tb_l2_names, tb_l2_control, tb_l1_control, tb_l3_names
     name2code = {}                 # 一级名称 -> 代码(int)
     code2name = {}                 # 代码(int) -> 一级名称

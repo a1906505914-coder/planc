@@ -18,6 +18,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import sap_reader as SR
 import sap_common as C
 import sap_adapter as A   # ⚡⚡ 2026-08-30 支持 U8（XBJ）回退 + 年份推断
+import sap_report as RPT  # ⚡⚡ 2026-08-31 企业报表（利润表/资产负债表 .xls）读取
 
 
 def _infer_year(data):
@@ -237,16 +238,27 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     _txt(ws2, 1, 1, f'自建资产负债表（{year}，核对基准=企业报表）', bold=True)
     _txt(ws2, 1, 2, '编制单位：SAP 集团', bold=True)
     rows = [('资 产', BS_ASSET_ROWS, 1), ('负 债', BS_LIAB_ROWS, -1), ('所有者权益', BS_EQ_ROWS, -1)]
+    # ⚡⚡ 2026-08-31 账套导出企业报表时直接读企业报表（口径与报表完全一致）。
+    #   否则回退 ent_l1 一级名聚合（SAP 无 6600 池拆分能力的 U8/XBJ 等）。
+    _use_ent_rep = RPT.has_enterprise_reports(data_dir)
+    _ent_bs = {} if _use_ent_rep else None
+    if _use_ent_rep:
+        for c in comps:
+            _ent_bs[c] = RPT.read_ent_balance(data_dir, c)
     r = 3
     for sec, cfgs, sgn in rows:
         _txt(ws2, r, 1, sec, bold=True, fill=HEAD_FILL); r += 1
         for rn, kws in cfgs:
             _txt(ws2, r, 1, rn)
             for j, c in enumerate(comps):
-                v = sum(a['qm'] for l1, a in ent_l1[c].items()
-                        if any(k in l1 for k in kws))
-                # ⚡ 2026-08-09 修复：负债/权益贷余科目转正显示（铁律54；原 _sgn 未生效）
-                _money(ws2, r, 2 + j, v * sgn)
+                if _ent_bs is not None:
+                    v = _ent_bs.get(c, {}).get(rn, 0.0)   # 企业报表（负债权益已贷余转正）
+                else:
+                    v = sum(a['qm'] for l1, a in ent_l1[c].items()
+                            if any(k in l1 for k in kws))
+                    # ⚡ 2026-08-09 修复：负债/权益贷余科目转正显示（铁律54；原 _sgn 未生效）
+                    v = v * sgn
+                _money(ws2, r, 2 + j, v)
             r += 1
         r += 1
     # 勾稽
@@ -258,6 +270,12 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     hdr = ['项目'] + comps + ['集团合计']
     for j, h in enumerate(hdr, 1):
         _txt(ws3, 2, j, h, fill=HEAD_FILL, bold=True)
+    # ⚡⚡ 2026-08-31 企业报表利润表直接读（管理费用/销售费用等功能范围拆分、
+    #   6001 父级+GL 子级净额等口径 SAP 聚合无法复现 → 以企业报表为准）。
+    _ent_pl = {} if _use_ent_rep else None
+    if _use_ent_rep:
+        for c in comps:
+            _ent_pl[c] = RPT.read_ent_profit(data_dir, c)
     r = 3
     for rn, kws in PL_ROWS:
         _txt(ws3, r, 1, rn)
@@ -266,8 +284,11 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         #   错取借方 jf → 334M 显示 1.96M，利润表投资收益严重失真）。
         is_income = rn in ('营业收入', '其他收益', '投资收益', '营业外收入')
         for j, c in enumerate(comps, 2):
-            v = sum((a['df'] if is_income else a['jf']) for l1, a in ent_l1[c].items()
-                    if any(k in l1 for k in kws))
+            if _ent_pl is not None:
+                v = _ent_pl.get(c, {}).get(rn, 0.0)
+            else:
+                v = sum((a['df'] if is_income else a['jf']) for l1, a in ent_l1[c].items()
+                        if any(k in l1 for k in kws))
             _money(ws3, r, j, v)
             tot += v
         _money(ws3, r, len(comps) + 2, tot, bold=True, fill=TOT_FILL)

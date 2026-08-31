@@ -704,10 +704,16 @@ def _tb_total(tb_year, which, kind):
         else:
             _prefs = _PREFIX_OF.get(_key, ())
         tot = 0.0
-        for c, v in tb_year.items():
-            nm = str(v.get('name') or '')
-            if any(nm.startswith(p) for p in _prefs):
-                tot += float(v.get('credit') if kind == 'cr' else v.get('debit') or 0.0)
+        # ⚡⚡ 2026-08-31 修复（XBJ 主营收入 14.2B=2×7.1B 双计根因）：read_km 对 XBJ
+        #   同时生成【一级聚合行】(code[:4]，6001) + 【末级行】(600101xx)，name 都是
+        #   『主营业务收入\…』→ prefix 遍历全部命中 → 双计。排除父级（有子级以其 code 为
+        #   前缀的行），只计末级叶子（同 _gross_entity 父=子和逻辑）。
+        _hit = {c for c, v in tb_year.items()
+                if any(str(v.get('name') or '').startswith(p) for p in _prefs)}
+        _leaves = [c for c in _hit if not any(c != c2 and c2.startswith(c) for c2 in _hit)]
+        for c in _leaves:
+            v = tb_year[c]
+            tot += float(v.get('credit') if kind == 'cr' else v.get('debit') or 0.0)
         return tot
     v = tb_year.get(code)
     if not v:

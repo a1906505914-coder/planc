@@ -154,13 +154,18 @@ def _to_f(x):
 
 
 def read_fee_scope(data_dir, comp):
-    """读费用目录 费用/{comp}/{类别}N.xlsx（取最大序号=最新累计）。
+    """读费用目录（功能范围拆分期间费用）：
+    格式 A（子目录）：费用/{comp}/{类别}N.xlsx（N=月份序号，取最大=最新累计，本期累计 col3）
+    格式 B（根目录单文件）：费用/{comp}.xlsx（sheets=类别，列=1月..N月，累计=Σ月份）
     返回 {类别: [(科目名, 金额), ...]}，科目名=非缩进非合计的一级项。
     无费用目录/无文件 → {}。"""
     data_dir = _resolve_root(data_dir)
     base = os.path.join(data_dir, '费用', str(comp))
     if not os.path.isdir(base):
-        return {}
+        fp = os.path.join(data_dir, '费用', f'{comp}.xlsx')
+        if not os.path.exists(fp):
+            return {}
+        return _read_fee_flat(fp)
     out = {}
     for cat in ('管理费用', '销售费用', '研发费用', '制造费用'):
         files = glob.glob(os.path.join(base, f'{cat}*.xlsx'))
@@ -184,4 +189,33 @@ def read_fee_scope(data_dir, comp):
             items.append((s, v))
         wb.close()
         out[cat] = items
+    return out
+
+
+def _read_fee_flat(fp):
+    """格式 B：费用/{comp}.xlsx（sheets=类别，列=1月..N月，累计=Σ月份列）。"""
+    out = {}
+    wb = openpyxl.load_workbook(fp, read_only=True, data_only=True)
+    for cat in ('管理费用', '销售费用', '研发费用', '制造费用'):
+        if cat not in wb.sheetnames:
+            continue
+        ws = wb[cat]
+        rows = list(ws.iter_rows(values_only=True))
+        if len(rows) < 2:
+            continue
+        items = []
+        for r in rows[1:]:
+            if not r or len(r) < 3 or not r[1]:
+                continue
+            nm = str(r[1])
+            if nm.startswith('\u3000'):
+                continue   # 缩进子行（父级小计的拆分）
+            s = nm.strip()
+            if s.startswith('合计'):
+                continue
+            v = sum(_to_f(x) for x in r[2:])   # 1月..N月累计
+            items.append((s, v))
+        if items:
+            out[cat] = items
+    wb.close()
     return out

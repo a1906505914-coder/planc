@@ -212,8 +212,17 @@ def read_km(path_or_comp=None):
     entries = tb_entries(comp)
     out = {}
     # 一级聚合（code[:4]）——U8 生成器一级名匹配依赖（_detect_codes 找 level==1 精确名）
+    # ⚡⚡ 2026-08-31 修复（AZ 营业收入双计 5.24B=2×2.62B 根因）：U8 科目余额表含
+    #   【父级行】（6001 主营业务收入）+【末级行】（6001.01 主营业务收入）同额——
+    #   原遍历全部行按 code[:4] 累加 → 父级+子级都归 l1['6001'] → 双计
+    #   （上分主营 21.1M=2×10.5M）。改为：有子级的【父级行】不参与聚合（只聚合末级叶子），
+    #   父级独立数据由子级承担（父=子和的镜像结构）。
     l1 = {}
+    _all_c = set(entries)
     for code, v in entries.items():
+        # 父级行（存在以其 code 为前缀的子级）→ 跳过聚合（防父+子双计）
+        if any(code != c2 and c2.startswith(code) for c2 in _all_c):
+            continue
         c4 = code[:4]
         if c4 not in l1:
             nm = str(v.get('name', '')).split('-')[0].split('－')[0].strip() or c4

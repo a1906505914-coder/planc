@@ -314,8 +314,6 @@ def read_all_tb(data_dir, entities, years):
         _has_rep = RPT.has_enterprise_reports(data_dir)
         for e in entities:
             _fs = RPT.read_fee_scope(data_dir, e)
-            if _fs:
-                _fee_scope[e] = _fs
             if _has_rep:
                 _pl = RPT.read_ent_profit(data_dir, e)
                 if abs(float(_pl.get('财务费用', 0.0))) > 0.005:
@@ -327,6 +325,8 @@ def read_all_tb(data_dir, entities, years):
                     if (_cat not in _fs
                             and abs(float(_pl.get(_cat, 0.0))) > 0.005):
                         _fs.setdefault(_cat, [(f'{_cat}（企业报表）', float(_pl.get(_cat, 0.0)))])
+            if _fs:
+                _fee_scope[e] = _fs
         for e, yd in entities.items():
             km = _adapter.read_km(e)
             l2map = {}

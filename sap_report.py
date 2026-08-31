@@ -177,15 +177,28 @@ def read_fee_scope(data_dir, comp):
             return int(m.group(1)) if m else 0
         best = max(files, key=_seq)
         wb = openpyxl.load_workbook(best, read_only=True, data_only=True)
+        rows = list(wb.worksheets[0].iter_rows(values_only=True))
+        # ⚡⚡ 2026-08-31 格式探测：表头含『月』列（如 1月/2月..N月）→ 逐月列格式
+        #   （1030 研发费用.xlsx 混入子目录；科目名 col1、合计=Σ月份）；否则标准格式 A
+        #   （表头 项目/本月/本期累计，科目名 col0、取本期累计 col3）
+        _is_monthly = bool(rows) and any(
+            c is not None and str(c).strip().endswith('月') for c in rows[0])
         items = []
-        for r in wb.worksheets[0].iter_rows(values_only=True):
+        for r in rows[1:]:
             if not r or not r[0]:
                 continue
-            nm = str(r[0])
-            s = nm.strip()
-            if s.startswith('合计') or nm.startswith('\u3000'):
-                continue  # 排除合计行与缩进子行（父级小计的拆分，避免双计）
-            v = _to_f(r[2])  # 本期累计数
+            if _is_monthly:
+                nm = str(r[1]) if len(r) > 1 and r[1] else ''
+                s = nm.strip()
+                if s.startswith('合计') or nm.startswith('\u3000'):
+                    continue
+                v = sum(_to_f(x) for x in r[2:])
+            else:
+                nm = str(r[0])
+                s = nm.strip()
+                if s.startswith('合计') or nm.startswith('\u3000'):
+                    continue
+                v = _to_f(r[2])  # 本期累计数
             items.append((s, v))
         wb.close()
         out[cat] = items

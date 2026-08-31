@@ -311,14 +311,22 @@ def read_all_tb(data_dir, entities, years):
         #   冲减），TB 借发双计（利息收入贷方 8M + 支出借方 72M）→ 有企业报表的主体
         #   覆盖为『财务费用』企业报表值（与试算表 Sheet3 同源一致）。
         _fee_fin = {}
+        _has_rep = RPT.has_enterprise_reports(data_dir)
         for e in entities:
             _fs = RPT.read_fee_scope(data_dir, e)
             if _fs:
                 _fee_scope[e] = _fs
-            if RPT.has_enterprise_reports(data_dir):
+            if _has_rep:
                 _pl = RPT.read_ent_profit(data_dir, e)
                 if abs(float(_pl.get('财务费用', 0.0))) > 0.005:
                     _fee_fin[e] = float(_pl.get('财务费用', 0.0))
+                # ⚡⚡ 2026-08-31 逐类别补全：费用目录缺某类别（如 1030 有管理/销售/
+                #   制造文件但无研发费用文件）但企业利润表有值 → 补企业报表值（与
+                #   试算表 Sheet3 同源一致）；完全无费用目录的主体同样回退企业报表。
+                for _cat in ('管理费用', '销售费用', '研发费用'):
+                    if (_cat not in _fs
+                            and abs(float(_pl.get(_cat, 0.0))) > 0.005):
+                        _fs.setdefault(_cat, [(f'{_cat}（企业报表）', float(_pl.get(_cat, 0.0)))])
         for e, yd in entities.items():
             km = _adapter.read_km(e)
             l2map = {}

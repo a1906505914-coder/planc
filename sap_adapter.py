@@ -225,7 +225,12 @@ def read_km(path_or_comp=None):
             continue
         c4 = code[:4]
         if c4 not in l1:
-            nm = str(v.get('name', '')).split('-')[0].split('－')[0].strip() or c4
+            # ⚡⚡ 2026-08-31 聚合行 name 优先取【父级行】（entries[c4]，如泰国 4100 主营
+            #   收入/4100.01 销售收入）——否则取首个末级子级的 name（4100.01→"销售收入"），
+            #   detect_codes 一级名精确匹配（'主营业务收入'）落空 → 主营收入 0。
+            _p = entries.get(c4)
+            nm = (str(_p.get('name', '')).split('-')[0].split('－')[0].strip() if _p
+                  else str(v.get('name', '')).split('-')[0].split('－')[0].strip()) or c4
             l1[c4] = {'name': nm, 'odir': '借', 'opening': 0.0, 'debit': 0.0,
                       'credit': 0.0, 'fdir': '借', 'closing': 0.0, 'level': 1}
         l1[c4]['opening'] += float(v.get('qc') or 0.0)

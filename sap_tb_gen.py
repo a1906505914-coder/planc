@@ -139,16 +139,20 @@ def _l1(name):
 def _rev_cost_agg(comp, tb, year, prefix, is_income):
     """收入/成本 TB 聚合（⚡⚡ 2026-08-31 修复 AH 收入/成本双计与冲减根因）：
     SAP 损益科目借贷双方均有发生（父级行 df、GL 流水行 df+jf、其他业务收入 jf 退回等）
-    → 一律取【净额】：收入 df−jf、成本 jf−df（=企业报表口径；单边账套 XBJ 不变）。"""
+    → 一律取【净额】：收入 df−jf、成本 jf−df（=企业报表口径）。
+    ⚡⚡ 2026-09-01 补：借贷同额（镜像结转，XBJ 收入/成本 jf=df 同额）→ 净额=0 失真
+    → 同额取发生额（收入 df、成本 jf，=底稿/利润表口径）。"""
     tot = 0.0
     for (cc_, cd_, nm_, yy_), v_ in tb.items():
         if cc_ != comp or str(yy_) != str(year):
             continue
         if str(cd_).startswith(prefix):
+            _d = float(v_.get('df') or 0.0)
+            _j = float(v_.get('jf') or 0.0)
             if is_income:
-                tot += v_['df'] - v_['jf']
+                tot += _d if abs(_d - _j) < 0.005 else (_d - _j)
             else:
-                tot += v_['jf'] - v_['df']
+                tot += _j if abs(_d - _j) < 0.005 else (_j - _d)
     return tot
 
 
@@ -217,12 +221,38 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         if (str(code)[:4] in _pl_pfx and v.get('level') == 1
                 and (comp, str(code)) not in _skip):
             _pl_l1_kept.add((comp, str(code)[:4]))
+    # ⚡⚡ 2026-09-01 修复（AZ 试算表应收=净额 vs 底稿=余额 口径不一致根因）：备抵科目
+    #   1231 坏账准备的子级名撞被备抵科目名（AZ 1231.01 子级名『应收账款』→ 名称聚合
+    #   误归入应收账款 → 试算表应收=1122-坏账(净额 376.5M) vs 底稿应收=1122(余额
+    #   397.2M) 差 20.7M）。处理：①坏账准备族（1231 前缀）子级强制归位『坏账准备』；
+    #   ②资产负债表镜像父级（父级=子级之和）只保留父级、剔除子级——否则父级+子级
+    #   同归一个一级名会双计（AZ 1231 父级 -20.8M + 子级 -20.8M = -41.6M）。
+    _mirror_kids = set()   # 镜像父级的子级（父级已代表全族）→ 聚合时跳过
+    for comp, _cds in _by_comp.items():
+        for c1 in _cds:
+            _v1, _n1 = _cds[c1]
+            if _l1(_n1) in _pl_kws:
+                continue   # 损益镜像父级已走 _skip（剔父留叶）
+            _kids = [cc for cc in _cds if cc != c1 and cc.startswith(c1)]
+            if not _kids:
+                continue
+            _ksum = {'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0}
+            for cc in _kids:
+                for _k in _ksum:
+                    _ksum[_k] += float(_cds[cc][0].get(_k) or 0.0)
+            if all(abs(float(_v1.get(k) or 0.0) - _ksum[k]) < 0.005 for k in _ksum):
+                for cc in _kids:
+                    _mirror_kids.add((comp, cc))
     for (comp, code, name, yy), v in tb.items():
         if comp not in ent_l1:
             continue
         if (comp, str(code)) in _skip:
             continue   # 镜像父级（父=子和 且 子名含父级一级名）→ 剔除防双计
+        if (comp, str(code)) in _mirror_kids:
+            continue   # 资产负债表镜像父级的子级 → 父级已代表全族
         l1 = _l1(name)
+        if str(code)[:4] == '1231':
+            l1 = '坏账准备'   # 备抵科目子级名撞被备抵科目名 → 归位坏账准备
         if l1 not in _pl_kws and str(code)[:4] in _pl_pfx:
             _pfx4 = str(code)[:4]
             if (comp, _pfx4) not in _pl_l1_kept:
@@ -334,18 +364,33 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
                 v = _fee_scope[c][rn]   # 费用目录（TB 6600 池功能范围拆分）
             elif rn == '财务费用':
                 # ⚡⚡ 2026-08-31 与底稿一致（expense_detail tb_l2_control 净额）：
-                #   财务费用取 TB 净额（利息收入等贷方冲减），非借发
-                v = sum((a['jf'] - a['df']) for l1, a in ent_l1[c].items()
-                        if any(k in l1 for k in kws))
+                #   财务费用取 TB 净额（利息收入等贷方冲减），非借发。
+                #   ⚡⚡ 2026-09-01 补：借贷同额（XBJ 镜像）→ 取借发（同 _rev_cost_agg）
+                _t = 0.0
+                for l1, a in ent_l1[c].items():
+                    if any(k in l1 for k in kws):
+                        _d = a['df']; _j = a['jf']
+                        _t += _j if abs(_d - _j) < 0.005 else (_j - _d)
+                v = _t
             else:
                 # ⚡⚡ 2026-08-31 损益科目取净额（AH 信用减值/资产减值/其他收益/
-                #   投资收益等借贷双方冲减 → 净额=企业报表口径；XBJ 单边账套不变）
+                #   投资收益等借贷双方冲减 → 净额=企业报表口径）；⚠️ 2026-09-01 补：
+                #   XBJ 等账套损益科目借贷同额（镜像结转）→ 净额=0 失真（信用减值
+                #   jf=df=-2.4M 试算表 0 vs 底稿借发 -2.4M）→ 借贷同额取借/贷发。
                 if is_income:
-                    v = sum((a['df'] - a['jf']) for l1, a in ent_l1[c].items()
-                            if any(k in l1 for k in kws))
+                    _t = 0.0
+                    for l1, a in ent_l1[c].items():
+                        if any(k in l1 for k in kws):
+                            _d = a['df']; _j = a['jf']
+                            _t += _d if abs(_d - _j) < 0.005 else (_d - _j)
+                    v = _t
                 else:
-                    v = sum((a['jf'] - a['df']) for l1, a in ent_l1[c].items()
-                            if any(k in l1 for k in kws))
+                    _t = 0.0
+                    for l1, a in ent_l1[c].items():
+                        if any(k in l1 for k in kws):
+                            _d = a['df']; _j = a['jf']
+                            _t += _j if abs(_d - _j) < 0.005 else (_j - _d)
+                    v = _t
             _money(ws3, r, j, v)
             tot += v
         _money(ws3, r, len(comps) + 2, tot, bold=True, fill=TOT_FILL)

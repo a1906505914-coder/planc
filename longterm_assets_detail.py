@@ -159,10 +159,13 @@ GROUPS = {
     'ONCA': {
         # ⚡⚡ 2026-08-30 新增：其他非流动资产（1831 资产购置预付款 等），
         #   之前无生成器 → 科目无处安放被预付 kw='预付' 误吸收。并入 longterm 程序生成。
+        # ⚡⚡ 2026-09-01 加『委托贷款』：AH 1010 委托贷款 4.4B（一年以上 3.58B）归入
+        #   其他非流动资产（横展表/企业报表口径）；一年内到期委托贷款 0.84B 由匹配逻辑排除
+        #   （归『一年内到期的非流动资产』，不混入其他非流动）。
         'title': '其他非流动资产', 'paper': '其他非流动资产审计底稿',
         'main_sheet': '其他非流动资产分类汇总表',
         'inc_sheet': '其他非流动资产增加检查表', 'dec_sheet': '其他非流动资产减少检查表',
-        'cost_names': ['其他非流动资产'], 'accum_names': [],
+        'cost_names': ['其他非流动资产', '委托贷款'], 'accum_names': [],
         'impair_names': [], 'clear_names': [],
         'accum_kw': None, 'amort': False, 'amort_src': None, 'special': False,
     },
@@ -434,7 +437,9 @@ def _find_group_codes(km, gkey):
         nm = (d.get('name') or '').strip()
         if not nm:
             continue
-        if any(_gn in nm for _gn in _gnames) and '清理' not in nm:
+        if any(_gn in nm for _gn in _gnames) and '清理' not in nm \
+                and not (gkey == 'ONCA' and '一年内到期' in nm):
+            # ⚡⚡ 2026-09-01 ONCA 排除『一年内到期的委托贷款』（归一年内到期的非流动资产）
             # 费用/去向科目（管理费用-无形资产摊销 等）虽含组名，但属 P&L 费用列支，绝不构成资产原值。
             # 名称含「摊销」但无「累计」语义 → 费用科目（无形资产摊销/固定资产折旧等）；父级路径在 TB 可能缺失
             # （如 6605.01.04 名称仅"无形资产摊销"，不带"管理费用"前缀），故需按摊销/折旧动词直接排除。
@@ -1087,6 +1092,12 @@ def _prep_group(ent, km, gl, gkey):
         #   原值虚高 146.6M → 核对差 8.35亿）。父级行存在且无任何子目（1701 单级）→ 回退父级。
         _leaf_keys = [c for c in _keys
                       if not any(o.startswith(c) and len(o) > len(c) for o in _keys)]
+        # ⚡⚡ 2026-09-01 ONCA 委托贷款排除『一年内到期』：1301 虚拟父级聚合会把
+        #   一年内到期委托贷款（0.84B）并入其他非流动资产（企业报表口径：应归一年内
+        #   到期的非流动资产）。仅 ONCA 且委托贷款前缀时排除该子目。
+        if gkey == 'ONCA' and str(code) == '1301':
+            _leaf_keys = [c for c in _leaf_keys
+                          if '一年内到期' not in str(km[c].get('name') or '')]
         _rows = [km[c] for c in _leaf_keys if not (_has_parent and str(c) == str(code))]
         if not _rows:
             _rows = [km[str(code)]] if _has_parent and str(code) in km else []

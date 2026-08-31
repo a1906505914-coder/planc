@@ -92,6 +92,34 @@ def main():
             # ⚡⚡ 2026-08-31 损益类识别：审定表含『本期数』且无『期末未审数』→ 损益类
             #   （发生额口径，用 Sheet3 利润表核对；Sheet1 qm=0 不适用）
             _is_pl = any('本期数' in str(c) for c in rws[hi]) and                       not any('期末未审数' in str(c) for c in rws[hi])
+            # ⚡⚡ 2026-08-31 营业收入结构C（项目×主体）：审定表含『一、主营业务收入』项目行
+            #   → 特殊核对：项目行聚合 vs 利润表营业收入/营业成本
+            _is_rev = subj == '营业收入' or any(
+                r and r[0] and str(r[0]).strip() == '一、主营业务收入' for r in rws[hi:hi + 3])
+            if _is_rev:
+                _rev = _cost = 0.0
+                for r in rws[hi + 1:]:
+                    if not r or not r[0]:
+                        continue
+                    if r[1] and str(r[1]).strip() in ('全集团合计', '合计'):
+                        continue
+                    _p = str(r[0]).strip()
+                    if _p in ('一、主营业务收入', '二、其他业务收入'):
+                        _rev += r[3] if len(r) > 3 and isinstance(r[3], (int, float)) else 0
+                    elif _p in ('减：主营业务成本', '减：其他业务成本'):
+                        _cost += r[3] if len(r) > 3 and isinstance(r[3], (int, float)) else 0
+                _tb_rev = sum(v for v in pl_rows.get('营业收入', {}).values() if isinstance(v, (int, float)))
+                _tb_cost = sum(v for v in pl_rows.get('营业成本', {}).values() if isinstance(v, (int, float)))
+                _real = abs(abs(_rev) - abs(_tb_rev)) > 1.0 or abs(abs(_cost) - abs(_tb_cost)) > 1.0
+                _diff_t = abs(_rev) + abs(_cost) + abs(_tb_rev) + abs(_tb_cost)
+                if _real:
+                    n_real += 1
+                    print(f"{'营业收入':<14}{1:>8}{0:>8}{_diff_t:>18,.2f}  ❌")
+                    print(f"    主营收入: 底稿={_rev:,.2f} 利润表={_tb_rev:,.2f}")
+                    print(f"    主营成本: 底稿={_cost:,.2f} 利润表={_tb_cost:,.2f}")
+                else:
+                    n_ok += 1
+                continue
             # 结构判断：数据行 row[1] 是否为『项目』（原值/累计折旧/减值/净值）→ 结构B（主体×项目）
             # ⚡ 跳过表头后的空行（审定表标题/说明/空行）找首个数据行
             is_struct_b = False

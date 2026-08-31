@@ -692,9 +692,20 @@ def _tb_total(tb_year, which, kind):
             #   691,797,482），若优先取它会虚增成本（15 分公司 14.26 亿 vs 正确 7.34 亿）；
             #   XBJ 的 5002 合同履约成本才是成本科目（6401 是结转镜像，双加=2 倍
             #   XBJ03 实证 68427.82）。故：有主营业务成本→取它；无→取合同履约成本。
-            _prefs = ('主营业务成本',) if any(
-                str(v.get('name') or '').startswith('主营业务成本')
-                for v in tb_year.values()) else ('合同履约成本',)
+            # ⚡⚡ 2026-08-31 修复（XBJ 主营成本 7.042B vs 利润表 7.483B 差异 441M）：
+            #   无 6401 主体的 5002 合同履约成本若为【负数】（结转冲回，8 主体 -4K~-108M），
+            #   不是成本发生（利润表营业成本=6401+6402 不含）→ 该主体成本=0，与利润表一致。
+            #   仅当 5002 有正数借发（真实成本归集）才用合同履约成本兜底。
+            if any(str(v.get('name') or '').startswith('主营业务成本')
+                   for v in tb_year.values()):
+                _prefs = ('主营业务成本',)
+            elif any(float(v.get('debit') or 0.0) > 0.005 and
+                     '合同履约成本' in str(v.get('name') or '')
+                     and '结转' not in str(v.get('name') or '')
+                     for v in tb_year.values()):
+                _prefs = ('合同履约成本',)
+            else:
+                _prefs = ('主营业务成本',)   # 无 6401 且 5002 无正借发 → 成本 0
         else:
             _prefs = _PREFIX_OF.get(_key, ())
         tot = 0.0

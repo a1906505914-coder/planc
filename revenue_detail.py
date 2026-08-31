@@ -699,13 +699,12 @@ def _tb_total(tb_year, which, kind):
             if any(str(v.get('name') or '').startswith('主营业务成本')
                    for v in tb_year.values()):
                 _prefs = ('主营业务成本',)
-            elif any(float(v.get('debit') or 0.0) > 0.005 and
-                     '合同履约成本' in str(v.get('name') or '')
-                     and '结转' not in str(v.get('name') or '')
-                     for v in tb_year.values()):
+            elif sum(float(v.get('debit') or 0.0) for v in tb_year.values()
+                     if '合同履约成本' in str(v.get('name') or '')
+                     and '结转' not in str(v.get('name') or '')) > 0.005:
                 _prefs = ('合同履约成本',)
             else:
-                _prefs = ('主营业务成本',)   # 无 6401 且 5002 无正借发 → 成本 0
+                _prefs = ('主营业务成本',)   # 无 6401 且 5002 净额非正（结转冲回）→ 成本 0
         else:
             _prefs = _PREFIX_OF.get(_key, ())
         tot = 0.0

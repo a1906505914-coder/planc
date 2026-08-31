@@ -1882,19 +1882,6 @@ def build_cover(wb, entities, cur_year, prev_year, has_customer):
 def build_revenue_audit_sheet(wb, entities, tb_all, cur_y, prev_y, data_dir=None):
     """营业收入审定表（按年构建：本期数=cur_y、上年数=prev_y，2026-07-31 改按年拆分后
     每个年度文件各自构建，不再一次输出全部年份）。"""
-    # ⚡⚡ 2026-08-31 账套导出企业利润表时优先读企业报表（AH 收入口径：
-    #   6001 父级 df + GL 子级净额，SAP 聚合无法复现 → 与试算表 Sheet3 同源一致）
-    _use_ent = False
-    _ent_pl = {}
-    if data_dir:
-        try:
-            import sap_report as _RPT
-            if _RPT.has_enterprise_reports(data_dir):
-                _use_ent = True
-                for _e in entities:
-                    _ent_pl[_e] = _RPT.read_ent_profit(data_dir, _e)
-        except Exception:
-            _use_ent = False
     ws = wb.create_sheet('营业收入 审定表', 0)  # 插入为第一张
     ws.cell(1, 1, '营业收入审定表（全集团汇总）').font = S.SHELL_TITLE_FONT
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
@@ -1910,13 +1897,7 @@ def build_revenue_audit_sheet(wb, entities, tb_all, cur_y, prev_y, data_dir=None
     def _tb(ent, y, role):
         """从 TB 取数：rev→credit, cost→debit, other_rev→credit, other_cost→debit。
         ⚡⚡ 2026-08-30 结论：维持 gross 贷方/借方口径（铁律3）——与 TB 利润表发生额一致
-        （收入取贷、成本取借；净额改法因红字冲回借方负数导致双计 ×2，已回退）。
-        ⚡⚡ 2026-08-31 企业利润表优先（AH）：主营/其他收入成本直接读企业报表。"""
-        if _use_ent:
-            _m = {'rev': '主营业务收入', 'orev': '其他业务收入',
-                  'cost': '主营业务成本', 'ocost': '其他业务成本'}
-            if role in _m:
-                return float(_ent_pl.get(ent, {}).get(_m[role], 0.0))
+        （收入取贷、成本取借；净额改法因红字冲回借方负数导致双计 ×2，已回退）。"""
         tb = tb_all.get(ent, {}).get(y, {})
         cd = _detect_codes(tb)
         if role == 'rev':

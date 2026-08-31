@@ -136,6 +136,22 @@ def _l1(name):
     return C.norm_l1(name)
 
 
+def _rev_cost_agg(comp, tb, year, prefix, is_income):
+    """收入/成本 TB 聚合（⚡⚡ 2026-08-31 修复 AH 收入/成本双计与冲减根因）：
+    SAP 损益科目借贷双方均有发生（父级行 df、GL 流水行 df+jf、其他业务收入 jf 退回等）
+    → 一律取【净额】：收入 df−jf、成本 jf−df（=企业报表口径；单边账套 XBJ 不变）。"""
+    tot = 0.0
+    for (cc_, cd_, nm_, yy_), v_ in tb.items():
+        if cc_ != comp or str(yy_) != str(year):
+            continue
+        if str(cd_).startswith(prefix):
+            if is_income:
+                tot += v_['df'] - v_['jf']
+            else:
+                tot += v_['jf'] - v_['df']
+    return tot
+
+
 def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     """生成 SAP 自建试算表。comps=None 时用全部公司。返回文件路径。
     ⚡⚡ 2026-08-30：改走 sap_adapter.read_tb_full（SAP/U8 双支持 + 年份自动推断）。"""
@@ -254,26 +270,18 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     _txt(ws2, 1, 1, f'自建资产负债表（{year}，核对基准=企业报表）', bold=True)
     _txt(ws2, 1, 2, '编制单位：SAP 集团', bold=True)
     rows = [('资 产', BS_ASSET_ROWS, 1), ('负 债', BS_LIAB_ROWS, -1), ('所有者权益', BS_EQ_ROWS, -1)]
-    # ⚡⚡ 2026-08-31 账套导出企业报表时直接读企业报表（口径与报表完全一致）。
-    #   否则回退 ent_l1 一级名聚合（SAP 无 6600 池拆分能力的 U8/XBJ 等）。
-    _use_ent_rep = RPT.has_enterprise_reports(data_dir)
-    _ent_bs = {} if _use_ent_rep else None
-    if _use_ent_rep:
-        for c in comps:
-            _ent_bs[c] = RPT.read_ent_balance(data_dir, c)
+    # ⚡⚡ 2026-08-31 铁律：试算表必须与 TB 同源（底稿与 TB 核对一致）→ 不用企业报表
+    #   覆盖。Sheet2 资产负债表 = ent_l1 一级名聚合（TB 口径）。
     r = 3
     for sec, cfgs, sgn in rows:
         _txt(ws2, r, 1, sec, bold=True, fill=HEAD_FILL); r += 1
         for rn, kws in cfgs:
             _txt(ws2, r, 1, rn)
             for j, c in enumerate(comps):
-                if _ent_bs is not None:
-                    v = _ent_bs.get(c, {}).get(rn, 0.0)   # 企业报表（负债权益已贷余转正）
-                else:
-                    v = sum(a['qm'] for l1, a in ent_l1[c].items()
-                            if any(k in l1 for k in kws))
-                    # ⚡ 2026-08-09 修复：负债/权益贷余科目转正显示（铁律54；原 _sgn 未生效）
-                    v = v * sgn
+                v = sum(a['qm'] for l1, a in ent_l1[c].items()
+                        if any(k in l1 for k in kws))
+                # ⚡ 2026-08-09 修复：负债/权益贷余科目转正显示（铁律54；原 _sgn 未生效）
+                v = v * sgn
                 _money(ws2, r, 2 + j, v)
             r += 1
         r += 1
@@ -286,12 +294,27 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     hdr = ['项目'] + comps + ['集团合计']
     for j, h in enumerate(hdr, 1):
         _txt(ws3, 2, j, h, fill=HEAD_FILL, bold=True)
-    # ⚡⚡ 2026-08-31 企业报表利润表直接读（管理费用/销售费用等功能范围拆分、
-    #   6001 父级+GL 子级净额等口径 SAP 聚合无法复现 → 以企业报表为准）。
-    _ent_pl = {} if _use_ent_rep else None
-    if _use_ent_rep:
+    # ⚡⚡ 2026-08-31 铁律：试算表与 TB 同源（底稿与 TB 核对一致）→ 不直接读企业报表。
+    #   管理费用/销售费用/研发费用/制造费用 在 SAP 6600 总池无独立科目 → 读账套
+    #   费用目录（6600 池功能范围拆分，=TB 拆分形态）→ 与底稿（expense_detail 同源）一致。
+    _fee_scope = {}
+    try:
+        _fs_cats = ('管理费用', '销售费用', '研发费用', '制造费用')
+        _has_rep = RPT.has_enterprise_reports(data_dir)
         for c in comps:
-            _ent_pl[c] = RPT.read_ent_profit(data_dir, c)
+            _fs = RPT.read_fee_scope(data_dir, c)
+            if _has_rep:
+                # ⚡⚡ 2026-08-31 与底稿(expense_detail)同源：费用目录缺某类别/全缺的
+                #   主体回退企业利润表（=TB 6600 池功能范围拆分，费用目录未导出部分）
+                _pl = RPT.read_ent_profit(data_dir, c)
+                for _cat in ('管理费用', '销售费用', '研发费用'):
+                    if (_cat not in _fs
+                            and abs(float(_pl.get(_cat, 0.0))) > 0.005):
+                        _fs.setdefault(_cat, [(f'{_cat}（企业报表）', float(_pl.get(_cat, 0.0)))])
+            if _fs:
+                _fee_scope[c] = {k: sum(v for _, v in items) for k, items in _fs.items()}
+    except Exception:
+        pass
     r = 3
     for rn, kws in PL_ROWS:
         _txt(ws3, r, 1, rn)
@@ -300,11 +323,29 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
         #   错取借方 jf → 334M 显示 1.96M，利润表投资收益严重失真）。
         is_income = rn in ('营业收入', '其他收益', '投资收益', '营业外收入')
         for j, c in enumerate(comps, 2):
-            if _ent_pl is not None:
-                v = _ent_pl.get(c, {}).get(rn, 0.0)
-            else:
-                v = sum((a['df'] if is_income else a['jf']) for l1, a in ent_l1[c].items()
+            if rn == '营业收入':
+                # ⚡⚡ 2026-08-31 GL 流水行取净额（AH 父级+GL 双计修复，与底稿/TB 一致）
+                v = (_rev_cost_agg(c, tb, year, '6001', True)
+                     + _rev_cost_agg(c, tb, year, '6051', True))
+            elif rn == '营业成本':
+                v = (_rev_cost_agg(c, tb, year, '6401', False)
+                     + _rev_cost_agg(c, tb, year, '6402', False))
+            elif rn in _fs_cats and c in _fee_scope and rn in _fee_scope[c]:
+                v = _fee_scope[c][rn]   # 费用目录（TB 6600 池功能范围拆分）
+            elif rn == '财务费用':
+                # ⚡⚡ 2026-08-31 与底稿一致（expense_detail tb_l2_control 净额）：
+                #   财务费用取 TB 净额（利息收入等贷方冲减），非借发
+                v = sum((a['jf'] - a['df']) for l1, a in ent_l1[c].items()
                         if any(k in l1 for k in kws))
+            else:
+                # ⚡⚡ 2026-08-31 损益科目取净额（AH 信用减值/资产减值/其他收益/
+                #   投资收益等借贷双方冲减 → 净额=企业报表口径；XBJ 单边账套不变）
+                if is_income:
+                    v = sum((a['df'] - a['jf']) for l1, a in ent_l1[c].items()
+                            if any(k in l1 for k in kws))
+                else:
+                    v = sum((a['jf'] - a['df']) for l1, a in ent_l1[c].items()
+                            if any(k in l1 for k in kws))
             _money(ws3, r, j, v)
             tot += v
         _money(ws3, r, len(comps) + 2, tot, bold=True, fill=TOT_FILL)

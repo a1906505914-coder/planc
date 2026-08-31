@@ -307,17 +307,11 @@ def read_all_tb(data_dir, entities, years):
         #   管理/销售/研发/制造独立科目 → 读账套费用目录 费用/{e}/{类别}N.xlsx
         #   （N=最新月份累计；每文件『合计：』行=企业利润表科目，已验证精确一致）。
         _fee_scope = {}
-        # ⚡⚡ 2026-08-31 财务费用（6603）口径：账套企业利润表财务费用=净额（利息收入
-        #   冲减），TB 借发双计（利息收入贷方 8M + 支出借方 72M）→ 有企业报表的主体
-        #   覆盖为『财务费用』企业报表值（与试算表 Sheet3 同源一致）。
-        _fee_fin = {}
         _has_rep = RPT.has_enterprise_reports(data_dir)
         for e in entities:
             _fs = RPT.read_fee_scope(data_dir, e)
             if _has_rep:
                 _pl = RPT.read_ent_profit(data_dir, e)
-                if abs(float(_pl.get('财务费用', 0.0))) > 0.005:
-                    _fee_fin[e] = float(_pl.get('财务费用', 0.0))
                 # ⚡⚡ 2026-08-31 逐类别补全：费用目录缺某类别（如 1030 有管理/销售/
                 #   制造文件但无研发费用文件）但企业利润表有值 → 补企业报表值（与
                 #   试算表 Sheet3 同源一致）；完全无费用目录的主体同样回退企业报表。
@@ -331,7 +325,6 @@ def read_all_tb(data_dir, entities, years):
             km = _adapter.read_km(e)
             l2map = {}
             _use_fee = e in _fee_scope
-            _use_fin = e in _fee_fin
             for code, v in km.items():
                 lv = v.get('level')
                 nm = str(v.get('name') or '')
@@ -346,10 +339,6 @@ def read_all_tb(data_dir, entities, years):
                         tb_l1_control[_k1] = tb_l1_control.get(_k1, 0.0) + float(v.get('debit') or 0.0)
                 elif len(code) >= 6:
                     c4 = code[:4]
-                    # ⚡⚡ 2026-08-31 有企业利润表的主体：财务费用 6603 TB 行跳过
-                    #   （借发口径双计 → 用企业报表净额覆盖，见下方 _fee_fin）
-                    if _use_fin and c4 == '6603':
-                        continue
                     # ⚡⚡ 2026-08-31 有费用目录的主体：6600 总池行跳过（功能范围拆分
                     #   到费用目录，TB 一级名聚合无法拆分管理/销售/研发/制造）
                     if _use_fee and c4 == '6600':
@@ -402,13 +391,6 @@ def read_all_tb(data_dir, entities, years):
                         for y in years:
                             _k2 = (e, _ci, c6, str(y))
                             tb_l2_control[_k2] = tb_l2_control.get(_k2, 0.0) + amt
-            # ⚡⚡ 2026-08-31 财务费用：企业利润表净额覆盖（6603 借发→净额口径）
-            if _use_fin:
-                _ci = EXPENSE_CATS.get('财务费用')
-                if _ci is not None:
-                    tb_l2_names[_ci].setdefault('F-财务费用', '财务费用（企业报表净额）')
-                    for y in years:
-                        tb_l2_control[(e, _ci, 'F-财务费用', str(y))] = _fee_fin[e]
         return name2code, code2name, tb_l2_names, tb_l2_control, tb_l1_control, tb_l3_names
     name2code = {}                 # 一级名称 -> 代码(int)
     code2name = {}                 # 代码(int) -> 一级名称

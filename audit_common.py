@@ -1357,12 +1357,6 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
         for ent in sorted(entities):
             prev_amt = _gross_entity(codes=codes, y=prev_y, for_entity=ent) if prev_y else 0.0
             cur_amt = _gross_entity(codes=codes, y=cur_y, for_entity=ent)
-            # ⚡⚡ 2026-08-31 企业利润表口径（AH 类账套，add_audit_summary_sheets 注入
-            #   item['_ent_pl']）：损益类主体值=企业利润表净额（TB 借发/贷发对齐，
-            #   与试算表 Sheet3 同源一致）
-            _ep = item.get('_ent_pl')
-            if _ep and is_pl and ent in _ep and _ep[ent] is not None:
-                cur_amt = _ep[ent]
             if prev_amt == 0 and cur_amt == 0:
                 continue
             t_prev += prev_amt; t_cur += cur_amt
@@ -1536,23 +1530,6 @@ def add_audit_summary_sheets(wb, data_dir, items, tb_full=None, entities=None, F
     # 按年拆分文件只注入目标年份（如 _2025 文件仅列 2025），否则用全部年份
     eff_years = [target_year] if target_year else years
     made = []
-    # ⚡⚡ 2026-08-31 企业利润表口径（AH 类账套）：损益类 by_entity 审定表主体值
-    #   = 企业利润表（净额口径，TB 借发/贷发差异对齐）——与试算表 Sheet3 同源一致。
-    #   仅当 data_dir 有企业报表目录且实体非空时注入；XBJ/AZ（无企业报表）不受影响。
-    try:
-        import sap_report as _RPT
-        if data_dir and entities and _RPT.has_enterprise_reports(data_dir):
-            for _it in items:
-                if not _it.get('by_entity') or not _it.get('income_statement'):
-                    continue
-                _sn = _it.get('subj_name') or str(_it.get('title', '')).replace(' 审定表', '')
-                _m = {}
-                for _e in entities:
-                    _pl = _RPT.read_ent_profit(data_dir, _e)
-                    _m[_e] = float(_pl[_sn]) if _sn in _pl else None
-                _it['_ent_pl'] = _m
-    except Exception:
-        pass
     for item in items:
             codes = item.get('codes')
             if isinstance(codes, str):

@@ -53,6 +53,22 @@ def main():
             tb_rows[str(r[0]).strip()] = {
                 str(hdr[i]): v for i, v in enumerate(r)
                 if i > 0 and hdr[i] and '合计' not in str(hdr[i]) and isinstance(v, (int, float))}
+    # Sheet3 利润表（损益类科目核对，发生额口径：费用取借方、收益取贷方，与 sap_tb_gen 同源）
+    pl_rows = {}
+    if '利润表' in wb.sheetnames:
+        _ws3 = wb['利润表']
+        _r3 = list(_ws3.iter_rows(values_only=True))
+        _hi3 = next((i for i, _r in enumerate(_r3[:4])
+                     if _r and _r[0] and '项目' in str(_r[0])), None)
+        if _hi3 is not None:
+            _heads3 = [str(c).strip() if c else '' for c in _r3[_hi3]]
+            for _r in _r3[_hi3 + 1:]:
+                if not _r or not _r[0]:
+                    continue
+                # ⚡⚡ 2026-08-31 排除『集团合计』列（否则主体Σ+合计 双计）
+                pl_rows[str(_r[0]).strip()] = {_heads3[j]: v for j, v in enumerate(_r)
+                                               if j > 0 and _heads3[j] and _heads3[j] != '集团合计'
+                                               and isinstance(v, (int, float))}
     wb.close()
 
     out = args.dir
@@ -73,6 +89,9 @@ def main():
             hi, ci = find_val_col(rws)
             if hi is None:
                 continue
+            # ⚡⚡ 2026-08-31 损益类识别：审定表含『本期数』且无『期末未审数』→ 损益类
+            #   （发生额口径，用 Sheet3 利润表核对；Sheet1 qm=0 不适用）
+            _is_pl = any('本期数' in str(c) for c in rws[hi]) and                       not any('期末未审数' in str(c) for c in rws[hi])
             # 结构判断：数据行 row[1] 是否为『项目』（原值/累计折旧/减值/净值）→ 结构B（主体×项目）
             # ⚡ 跳过表头后的空行（审定表标题/说明/空行）找首个数据行
             is_struct_b = False
@@ -96,31 +115,34 @@ def main():
                 continue
             # TB 匹配：精确名优先；否则 名称包含（排除 递延所得税/处置利得 从属科目、
             #   及『其他应付账款』等含前缀但不同科目标签的误配）
+            # ⚡⚡ 2026-08-31 损益类改从 Sheet3 利润表取数（发生额口径）
+            _src_rows = pl_rows if _is_pl else tb_rows
             tbk = None
-            if subj in tb_rows:
+            if subj in _src_rows:
                 tbk = subj
             else:
-                for k in tb_rows:
+                for k in _src_rows:
                     if subj and subj in k and len(k) <= len(subj) + 4 \
                             and not any(x in k for x in TB_EXCLUDE) \
                             and not (k.startswith('其他') and not subj.startswith('其他')):
                         tbk = k
                         break
             if tbk is None:
-                for k in tb_rows:
+                for k in _src_rows:
                     if k and k in subj and len(subj) <= len(k) + 4:
                         tbk = k
                         break
             if tbk is None:
                 continue
-            tbm = dict(tb_rows[tbk])
+            tbm = dict(_src_rows[tbk])
             # ⚡⚡ 2026-08-30 归并（审计列报口径）：其他应收/应付 需并入 应收/应付股利利息（TB 分开）
             MERGE = {'其他应收款': ['应收股利', '应收利息'],
                      '其他应付款': ['应付股利', '应付利息']}
             for _mk in MERGE.get(subj, []):
-                if _mk in tb_rows:
-                    for _e, _v in tb_rows[_mk].items():
+                if _mk in _src_rows:
+                    for _e, _v in _src_rows[_mk].items():
                         tbm[_e] = tbm.get(_e, 0.0) + _v
+            # ⚡⚡ 2026-08-31 损益类无归并（_src_rows=pl_rows）；此处保证 tbm 有值
             real = []
             sign = 0
             diff_tot = 0.0

@@ -641,7 +641,14 @@ def _detect_codes(tb_year):
                     code = c
                     break
         if code is None and _STD[key] in tb_year:   # 兜底标准代码
-            code = _STD[key]
+            # ⚡⚡ 2026-08-31 修复（XBJ 主营收入 260K vs TB 547M）：read_km 对 XBJ 生成了
+            #   错误的『标准码键』——6001 键 name=『主营业务收入\建筑工程\房建』（实为 60010101
+            #   子级值 260K），非真实父级。若不验证 name 直接按标准码取 → 漏 60010102/60010103
+            #   → 审定表主营收入少 5.4 亿。改：标准码行 name 精确命中才用；否则走名称前缀兜底。
+            _sv = tb_year[_STD[key]]
+            _nm = str(_sv.get('name') or '')
+            if _nm in names or _sv.get('level') is None:
+                code = _STD[key]
         if code is None:                            # 无父级 TB 名称前缀兜底
             _pfx = _PREFIX_OF.get(key)
             if _pfx and any(str(v.get('name') or '').startswith(p)

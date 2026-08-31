@@ -1301,7 +1301,9 @@ def _write_audit_by_entity_sheet(wb, item, tb_full, entities, years, target_year
                 pass
         def _pl_amt(_v, _is_credit):
             if _income_stmt:
-                return _v['df'] if _is_credit else _v['jf']
+                # ⚡⚡ 2026-08-31 损益类取净额（AH 借贷双方冲减：信用减值 jf94.9M/
+                #   df7.7M → 净额 87.2M = 企业报表/试算表口径；XBJ 单边不变）
+                return (_v['df'] - _v['jf']) if _is_credit else (_v['jf'] - _v['df'])
             return (_v['df'] - _v['jf']) if _is_credit else (_v['jf'] - _v['df'])
         name_fallback = item.get('subj_name') or (item.get('title') or '').replace(' 审定表', '')
         _hit_set = None

@@ -712,12 +712,45 @@ def _tb_total(tb_year, which, kind):
         #   同时生成【一级聚合行】(code[:4]，6001) + 【末级行】(600101xx)，name 都是
         #   『主营业务收入\…』→ prefix 遍历全部命中 → 双计。排除父级（有子级以其 code 为
         #   前缀的行），只计末级叶子（同 _gross_entity 父=子和逻辑）。
+        #   ⚡⚡ 2026-08-31 二次修复（AH 收入 15.95B vs 试算表 12.88B）：AH 6001 父级
+        #   (6001010000 df 2.48B) ≠ 子和(3.79B) → 非镜像父级【保留】独立值；GL 流水行
+        #   (6001010001 df 3.69B/debit 3.01B) 取【净额】。仅镜像父级(父=子和)排除防双计。
         _hit = {c for c, v in tb_year.items()
                 if any(str(v.get('name') or '').startswith(p) for p in _prefs)}
-        _leaves = [c for c in _hit if not any(c != c2 and c2.startswith(c) for c2 in _hit)]
+        _excl = set()
+        for c in _hit:
+            _kids = [c2 for c2 in _hit if c2 != c and c2.startswith(c)]
+            if not _kids:
+                continue
+            _f = 'credit' if kind == 'cr' else 'debit'
+            _pv = abs(float(tb_year[c].get(_f) or 0.0))
+            _vsum = sum(float(tb_year[k2].get(_f) or 0.0) for k2 in _kids)
+            # 父级排除：父=子和（镜像）或 父=任一子级值（read_km 错误聚合行，
+            #   XBJ 6401 父=64010102 首子级）→ 防双计。AH 6001 父=独立值保留。
+            if (abs(_pv - abs(_vsum)) < 1.0
+                    or any(abs(_pv - abs(float(tb_year[k2].get(_f) or 0.0))) < 1.0
+                           for k2 in _kids)):
+                _excl.add(c)
+        _leaves = [c for c in _hit if c not in _excl]
         for c in _leaves:
             v = tb_year[c]
-            tot += float(v.get('credit') if kind == 'cr' else v.get('debit') or 0.0)
+            nm = str(v.get('name') or '')
+            if kind == 'cr':
+                _c = float(v.get('credit') or 0.0)
+                _d = float(v.get('debit') or 0.0)
+                if '（GL）' in nm or '（GL' in nm:
+                    tot += _c - _d   # GL 流水行净额（AH 6001 GL 行 3.69B−3.01B）
+                elif abs(_c - _d) > 0.005:
+                    tot += _c - _d   # 有借方冲减（AH 其他业务收入退回）→ 净额
+                else:
+                    tot += _c        # 借贷同额（XBJ U8 镜像）→ 取贷方
+            else:
+                # ⚡⚡ 2026-08-31 成本口径：AH 6401 制造成本有真实贷方冲减（debit 2.80B/
+                #   credit 0.34B → 净额 2.55B=企业报表）；XBJ U8 成本科目借贷同额
+                #   （debit==credit 镜像）→ 取借方（=利润表）。区分：借贷不同取净额。
+                _d = float(v.get('debit') or 0.0)
+                _c = float(v.get('credit') or 0.0)
+                tot += (_d - _c) if abs(_d - _c) > 0.005 else _d
         return tot
     v = tb_year.get(code)
     if not v:

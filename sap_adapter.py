@@ -489,6 +489,47 @@ def read_tb_full(data_dir, entities=None, year='2026'):
     #   依赖它返回全量后内部按 comp_scope 过滤）。原加 _GROUP_COMPS 过滤破坏该语义 →
     #   1357 应交税费审定表全 0（1020 等主体数据被提前滤掉）。payroll 的集团主体过滤
     #   改在 read_tb_payroll 内部处理（见 payroll_detail）。
+    # ⚡⚡ 2026-08-31 AZ 外币主体折算（用户：合并底稿泰铢/美元是否已换算本币）：
+    #   合并折算/{comp}_折算试算表_*.xlsx 提供外币主体折算后人民币（CNY）试算表
+    #   （泰国 THB→CNY / 新加坡 USD→CNY）。检测到即用折算值替换该主体全部 TB 行
+    #   （原币混算严重错误：泰国应收 611M THB vs 折算 22M CNY）。AH/XBJ 无此目录不受影响。
+    try:
+        import glob as _glob
+        _conv_dir = os.path.join(_d, '合并折算')
+        if os.path.isdir(_conv_dir):
+            # 折算年份用 tb 行实际年份（read_tb_full 默认 year='2026'，AZ 实际 2025）
+            _yb = next((str(y4) for (_c0, _c1, _n0, y4) in tb), str(year))
+            _enames = {str(e[0]) for e in tb.keys()} if tb else set()
+            for _en in list(_enames):
+                _cand = _glob.glob(os.path.join(_conv_dir, f'{_en}_折算试算表_*.xlsx'))
+                if not _cand:
+                    continue
+                _fp = sorted(_cand)[-1]
+                import openpyxl as _ox
+                _wb = _ox.load_workbook(_fp, read_only=True, data_only=True)
+                _conv = {}
+                for _row in _wb.worksheets[0].iter_rows(values_only=True):
+                    if not _row or not _row[0] or not _row[1]:
+                        continue
+                    _c = str(_row[0]).strip()
+                    if not _c or _c == '科目代码':
+                        continue
+                    def _f(x):
+                        try: return float(x or 0)
+                        except Exception: return 0.0
+                    _conv[_c] = {'name': str(_row[1]).strip(), 'qc': _f(_row[3]),
+                                 'jf': _f(_row[4]), 'df': _f(_row[5]), 'qm': _f(_row[6])}
+                _wb.close()
+                _tb2 = {}
+                for _k, _v in tb.items():
+                    if _k[0] == _en:
+                        continue   # 丢弃外币原值（泰铢/美元），改用折算 CNY
+                    _tb2[_k] = _v
+                for _c, _cv in _conv.items():
+                    _tb2[(_en, _c, _cv['name'], _yb)] = _cv
+                tb = _tb2
+    except Exception:
+        pass
     return tb
 
 

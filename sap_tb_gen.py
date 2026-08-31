@@ -156,9 +156,43 @@ def build_sap_tb(data_dir, out_path=None, year=None, comps=None):
     ent_l1 = {}
     for c in comps:
         ent_l1[c] = {}
+    # ⚡⚡ 2026-08-31 修复（AZ 泰国账套损益双计 0.5× 根因）：U8 科目余额表损益科目含
+    #   【父级行】（6801 所得税费用）+【末级行】（6801.01 当期所得税费用）同额 →
+    #   ent_l1 按一级名聚合时父+子双计（上分所得税 60,058=2×30,029）。
+    #   精准剔除：仅当【父级金额 = 子级之和】（qc/jf/df/qm 全相等=镜像复制行）
+    #   且【有子级名称含父级一级名】（同科目父子，如 当期所得税费用⊇所得税费用；
+    #   泰国 6602 管理费用/职工薪酬 子名不含"管理费用"→ 保留父级，防 480K 丢失）。
+    #   仅对损益科目（匹配 PL_ROWS kws）；资产负债表科目不动（与底稿同源口径一致）。
+    _pl_kws = {kw for _r in PL_ROWS for kw in _r[1]}
+    _by_comp = {}
+    for (comp, code, _n, _y), _v in tb.items():
+        # ⚡⚡ read_tb_full 的 name 在 key（非 value）→ 需随行保存，_l1 判定依赖
+        _by_comp.setdefault(comp, {})[str(code)] = (_v, str(_n))
+    _skip = set()
+    for comp, _cds in _by_comp.items():
+        for c1 in _cds:
+            _v1, _n1 = _cds[c1]
+            if _l1(_n1) not in _pl_kws:
+                continue
+            _kids = [cc for cc in _cds if cc != c1 and cc.startswith(c1)]
+            if not _kids:
+                continue
+            _ksum = {'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0}
+            for cc in _kids:
+                for _k in _ksum:
+                    _ksum[_k] += float(_cds[cc][0].get(_k) or 0.0)
+            _pv = _v1
+            _mirror = all(abs(float(_pv.get(k) or 0.0) - _ksum[k]) < 0.005 for k in _ksum)
+            if not _mirror:
+                continue
+            _pl1 = _l1(_n1)
+            if any(_pl1 in _cds[cc][1] for cc in _kids):
+                _skip.add((comp, c1))
     for (comp, code, name, yy), v in tb.items():
         if comp not in ent_l1:
             continue
+        if (comp, str(code)) in _skip:
+            continue   # 镜像父级（父=子和 且 子名含父级一级名）→ 剔除防双计
         l1 = _l1(name)
         a = ent_l1[comp].setdefault(l1, {'qc': 0.0, 'jf': 0.0, 'df': 0.0, 'qm': 0.0})
         a['qc'] += v['qc']; a['jf'] += v['jf']; a['df'] += v['df']; a['qm'] += v['qm']

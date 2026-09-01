@@ -213,6 +213,11 @@ def main(src_dir, note_fp, merge_fp):
     for sn, note in notes.items():
         m_key = NOTE_TO_MERGE.get(sn, sn)
         m = merged.get(m_key, 0)
+        # ⚡⚡ 2026-09-01 长期股权投资净额口径：附注按被投资单位披露【原值】+单独披露
+        #   『长期股权投资减值准备』；合并审定表（横展）按资产负债表口径列示【净值】=
+        #   原值-减值（AH 差异 157.3M=减值 1512）。核对时附注原值扣减值后对比横展净值。
+        if sn == '长期股权投资' and '长期股权投资减值准备' in notes:
+            note -= notes['长期股权投资减值准备']
         if m == 0 and note == 0:
             continue
         if m == 0:

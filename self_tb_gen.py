@@ -544,13 +544,18 @@ def build_is(ent_tb_all, yy, data_dir=None):
             for c, v in l1.items():
                 _nm = str(v.get('name') or '')
                 _hit = False
+                # ⚡⚡ 2026-09-01 财务费用取【净额】(jf-df)：AH 财务费用贷方含 利息收入/汇兑
+                #   收益（1010 贷方 39.8M）→ 原取借方全额 116.7M vs 附注净额 76.9M，
+                #   全集团差 165M。利润表财务费用=利息支出-利息收入+汇兑损益（净额）。
+                #   科目余额表发生额不含期末损益结转，df 仅为业务冲减（利息收入/汇兑收益）。
+                _net = rn == '财务费用'
                 for k in cfg.get('credit', []):
                     if c.startswith(k):
                         tot += v['df']
                         _hit = True
                 for k in cfg.get('debit', []):
                     if c.startswith(k):
-                        tot += v['jf']
+                        tot += (v['jf'] - v['df']) if _net else v['jf']
                         _hit = True
                 # ⚡ SAP 模式：code 前缀未命中 → 名称关键词匹配（行级一次，防双计）
                 if not _hit and _SAP_MODE and cfg.get('kw') \
@@ -558,7 +563,7 @@ def build_is(ent_tb_all, yy, data_dir=None):
                     if cfg.get('credit'):
                         tot += v['df']
                     if cfg.get('debit'):
-                        tot += v['jf']
+                        tot += (v['jf'] - v['df']) if _net else v['jf']
             rows[rn] = tot
             # ⚡⚡ 2026-09-01 6600 期间费用总池拆分：有费用目录/企业报表的主体用拆分值覆盖
             #   （AH 管理费用 6.6B 误归 → 663M 正确值；其他账套 _FEE_SCOPE 为空不受影响）

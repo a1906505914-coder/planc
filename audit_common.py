@@ -2242,12 +2242,17 @@ def build_footnote_generic(wb, data_dir, sheet_name, title, rows_spec, is_credit
                 r[0] != r2[0] and r2[0].startswith(r[0]) and len(r2[0]) > len(r[0]) for r2 in rows)]
             qc = jf = df = qm = 0.0
             for cs, v in leafs:
-                qc += abs(v['qc']); qm += abs(v['qm'])
+                # ⚡⚡ 2026-09-01 修复（2480 长期借款附注 9.13亿 vs 审定 4.71亿 根因）：
+                #   原 abs 逐个累加 → 借余异常子目（2501010000 信用借款 +220.9M 借余）被
+                #   abs 成正 → Σ|子目|=912.6M 虚增 441.8M。改为【带符号求和再 abs】：
+                #   同方向子目（正常账套）结果不变；异方向子目自然抵减（负债贷余为主时
+                #   负和 → abs 转正，与审定表 _tb_detail `-v` 口径一致）。
+                qc += v['qc']; qm += v['qm']
                 if is_credit:
                     df += v['df']; jf += v['jf']
                 else:
                     jf += v['jf']; df += v['df']
-            out.append([qc, jf, df, qm])
+            out.append([abs(qc), jf, df, abs(qm)])
         return out
 
     # ---- 数据驱动裁剪（2026-08-03 skip_no_data）：账套全集团无该科目数据 → 不建 sheet ----

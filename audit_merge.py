@@ -161,7 +161,7 @@ def build_merge_workbook(data_dir, out_dir=None, years=None, quiet=False, entity
                 cc.font = S.SHELL_HFONT; cc.fill = S.SHELL_HFILL
                 cc.alignment = S.SHELL_CEN; cc.border = S.SHELL_BORDER
             r = 3
-            _cands = _interco_candidates(data_dir, yy, entities)
+            _cands = _interco_candidates(data_dir, yy, entities, out_dir=out_dir)
             for cand in _cands:
                 for j, v in enumerate(cand, 1):
                     cc = ws2.cell(r, j, v)
@@ -329,7 +329,7 @@ def build_merge_workbook(data_dir, out_dir=None, years=None, quiet=False, entity
             cc.font = S.SHELL_HFONT; cc.fill = S.SHELL_HFILL
             cc.alignment = S.SHELL_CEN; cc.border = S.SHELL_BORDER
         r = 3
-        _cands = _interco_candidates(data_dir, yy, entities)
+        _cands = _interco_candidates(data_dir, yy, entities, out_dir=out_dir)
         for cand in _cands:
             for j, v in enumerate(cand, 1):
                 cc = ws2.cell(r, j, v)
@@ -363,25 +363,51 @@ def build_merge_workbook(data_dir, out_dir=None, years=None, quiet=False, entity
     return True, out_paths, issues
 
 
-def _interco_candidates(data_dir, yy, entities=None):
+def _interco_candidates(data_dir, yy, entities=None, out_dir=None):
     """跨主体往来候选：扫描各往来科目底稿明细表，同一往来单位出现于 ≥2 主体 → 候选。
-    返回 [(科目, 单位, 主体数, 主体列表, 余额合计, '待抵消')]。"""
+    返回 [(科目, 单位, 主体数, 主体列表, 余额合计, '待抵消')]。
+    ⚡ 2026-09-01 修复：底稿定位从『data_dir/{fk}审计底稿_{yy}_生成.xlsx』单一路径
+      改为多目录候选（data_dir / out_dir / {out}/合并集团 / {out}/合并 / {out}/group），
+      glob 匹配任意命名后缀并取 mtime 最新（旧逻辑只找 _2026_生成，AH 合并底稿为
+      _AH合并 命名且位于底稿目录 → 全部漏扫 → 误报『无跨主体往来候选』）。"""
     import audit_common
     import subjects_registry as REG
     import openpyxl
+    import glob as _glob
     if entities is None:
         entities = sorted(audit_common.discover_entities(data_dir))
+    # 候选目录（去重保序）
+    dirs = [data_dir]
+    if out_dir:
+        dirs.append(out_dir)
+        for sub in ('合并集团', '合并', 'group', 'groups'):
+            p = os.path.join(out_dir, sub)
+            if os.path.isdir(p):
+                dirs.append(p)
+    seen_dir = set()
+    dirs = [d for d in dirs if os.path.isdir(d) and not (d in seen_dir or seen_dir.add(d))]
     out = []
     # 往来类科目（明细表含『往来单位名称』列）
     ca_keys = ('ar', 'ap', 'ar_other', 'ap_other', 'advance_recv', 'prepay',
                'contract_asset', 'contract_liab', 'note_recv', 'apn')
+    # 表头列名兼容（SAP/U8 命名差异）
+    _ENT_KEYS = ('核算主体', '主体', '公司', '单位')
+    _NM_KEYS = ('往来单位名称', '单位名称', '客户名称', '供应商名称', '往来单位', '客户', '供应商')
+    _END_KEYS = ('期末余额(人民币)', '期末余额', '期末余额(元)', '余额', '期末')
+    _PLACEHOLDER = ('（无辅助核算明细）', '（无明细）', '无辅助核算明细', '合计', '总计', '小计', '无')
     for key in ca_keys:
         subj = REG.REGISTRY.get(key)
         if not subj:
             continue
         fk = subj.get('file_key')
-        fp = os.path.join(data_dir, f'{fk}审计底稿_{yy}_生成.xlsx')
-        if not os.path.exists(fp):
+        fp = None
+        for d in dirs:
+            hits = [p for p in _glob.glob(os.path.join(d, f'{fk}审计底稿_*.xlsx'))
+                    if not os.path.basename(p).startswith('_备份_')]
+            if hits:
+                fp = max(hits, key=os.path.getmtime)  # 同名多文件保留最新
+                break
+        if fp is None:
             continue
         try:
             wb = openpyxl.load_workbook(fp, read_only=True, data_only=True)
@@ -392,10 +418,13 @@ def _interco_candidates(data_dir, yy, entities=None):
             wb.close()
             continue
         ws = wb[det_sn]
-        # 找表头（含『往来单位名称』）
+        # 找表头（含往来单位列）
         hdr_row = None
         for i, row in enumerate(ws.iter_rows(values_only=True), 1):
-            if row and '往来单位名称' in [str(x) if x else '' for x in row]:
+            if not row:
+                continue
+            txts = [str(x) if x is not None else '' for x in row]
+            if any(k in txts for k in _NM_KEYS):
                 hdr_row = i
                 break
         if hdr_row is None:
@@ -403,18 +432,23 @@ def _interco_candidates(data_dir, yy, entities=None):
             continue
         rows = list(ws.iter_rows(values_only=True))
         hdr = rows[hdr_row - 1]
-        c_ent = hdr.index('核算主体') if '核算主体' in hdr else 0
-        c_nm = hdr.index('往来单位名称') if '往来单位名称' in hdr else 3
-        c_end = next((j for j, h in enumerate(hdr) if h == '期末余额(人民币)'), None)
+        hdr_s = [str(x) if x is not None else '' for x in hdr]
+        c_ent = next((j for j, h in enumerate(hdr_s) if h in _ENT_KEYS), 0)
+        c_nm = next((j for j, h in enumerate(hdr_s) if h in _NM_KEYS), 3)
+        c_end = next((j for j, h in enumerate(hdr_s) if h in _END_KEYS), None)
         ent_unit = {}      # {unit: set(ent)}
         ent_sum = {}       # {unit: 期末合计}
         for row in rows[hdr_row:]:
-            if not row or not row[c_nm]:
+            if not row or len(row) <= c_nm or not row[c_nm]:
                 continue
-            ent = row[c_ent] if c_ent is not None else ''
-            unit = str(row[c_nm])
+            unit = str(row[c_nm]).strip()
+            if not unit or unit in _PLACEHOLDER or unit.startswith('（'):
+                continue
+            ent = str(row[c_ent]).strip() if c_ent is not None and row[c_ent] is not None else ''
+            if not ent or ent in ('合计', '总计', '全集团合计', '集团合计'):
+                continue
             ent_unit.setdefault(unit, set()).add(ent)
-            if c_end is not None and isinstance(row[c_end], (int, float)):
+            if c_end is not None and c_end < len(row) and isinstance(row[c_end], (int, float)):
                 ent_sum[unit] = ent_sum.get(unit, 0.0) + row[c_end]
         wb.close()
         for unit, ents in ent_unit.items():

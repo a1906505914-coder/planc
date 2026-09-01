@@ -12,11 +12,15 @@ from audit_common import sort_report_names
 def collect(src_dir, out_path):
     files = sorted(glob.glob(os.path.join(src_dir, '*审计底稿_*.xlsx')))
     # 名称映射：文件名→科目名
-    sheet_map = {}   # 科目名 → (文件, sheet 数据)
+    sheet_map = {}   # 科目名 → (文件路径, 文件显示名, sheet 数据)
     order = []
     for fp in files:
         base = os.path.basename(fp)
+        if base.startswith('_备份_'):
+            continue  # 备份文件不入附注汇总
         name = base.replace('审计底稿', '').replace('.xlsx', '').split('_')[0].strip()
+        if not name:
+            continue
         try:
             wb = openpyxl.load_workbook(fp, read_only=True, data_only=True)
         except Exception:
@@ -29,7 +33,10 @@ def collect(src_dir, out_path):
         wb.close()
         if not rows:
             continue
-        sheet_map[name] = (base, rows)
+        # 同名科目多文件（如 _2026_生成 / _AH合并 双命名）：保留 mtime 最新者，避免旧文件按文件名排序后覆盖新文件
+        if name in sheet_map and os.path.getmtime(fp) <= os.path.getmtime(sheet_map[name][0]):
+            continue
+        sheet_map[name] = (fp, base, rows)
         order.append(name)
     if not sheet_map:
         print('未找到任何附注汇总 sheet')
@@ -39,7 +46,7 @@ def collect(src_dir, out_path):
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     for name in ordered:
-        base, rows = sheet_map[name]
+        _, base, rows = sheet_map[name]
         ws = wb.create_sheet(name)
         for r in rows:
             ws.append(r)

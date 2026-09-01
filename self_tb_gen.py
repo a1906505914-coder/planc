@@ -417,6 +417,7 @@ def check_retained_earnings(ent_tb, ent_is=None):
 
 def build_bs(ent_tb_all, yy):
     """资产负债表：按报表行映射汇总（备抵带符号抵减原值），未结转损益入权益。"""
+    yy = str(yy)   # ⚡ 2026-09-01 防御：build_entity_tb 返回 str 年度 key，传 int 会静默取空（全 0）
     ent_rows = {}
     ent_unmatched = {}
     for ent, tb in ent_tb_all.items():
@@ -531,6 +532,7 @@ def build_is(ent_tb_all, yy, data_dir=None):
     IS_ROWS 的 code 前缀对 SAP 无效 → 按 cfg.kw 名称关键词匹配（ga 之外 AH 实证）。
     ⚡⚡ 2026-09-01 AH 6600 期间费用总池：data_dir 给定且 _FEE_SCOPE 未设置时懒加载
        费用目录拆分（audit_merge 经 build_is 生成横展表也走此路径）。"""
+    yy = str(yy)   # ⚡ 2026-09-01 防御：build_entity_tb 返回 str 年度 key，传 int 会静默取空（全 0）
     global _FEE_SCOPE
     if _FEE_SCOPE is None and data_dir and _is_sap(data_dir):
         _FEE_SCOPE = _load_fee_scope(data_dir, list(ent_tb_all)) or {}

@@ -120,21 +120,35 @@ def extract_note(rows):
                 return _sum_nums(rows[idxs[-1]])
         return 0.0
 
-    # ---- B 账龄格式：审定数列，优先 账面价值合计→账面价值→合 计 ----
+    # ---- B 账龄格式：优先『简单加计数』列（88家未抵消汇总），无则『审定数』列（已抵消）----
+    # ⚡ 2026-09-01 修复：AH 账龄格式表头 = 科目/简单加计数/合并抵消(借)/合并抵消(贷)/审定数，
+    #   『审定数』列 = 简单加计数 − 抵消 = 已抵消口径（应收取 481M=账面价值3.81B−抵消3.33B、
+    #   应付取 -2.42B=合计4.57B−抵消6.99B）；『简单加计数』列才是 88 家未抵消汇总，
+    #   与横展『全集团合计』（col90）同口径可比。提取行序：账面价值合计→账面余额合计→
+    #   账面价值→合 计→合计→小计→账龄行，避免取到『坏账准备』等负数备抵行。
     if typ == 'B':
         hdr = rows[hi]
+        j_simple = next((j for j, v in enumerate(hdr) if v and '简单加计数' in str(v)), None)
         j_aud = next((j for j, v in enumerate(hdr) if v and '审定数' in str(v)), None)
-        if j_aud is None:
+        jv = j_simple if j_simple is not None else j_aud
+        if jv is None:
             return 0.0
-        for pat in ('账面价值合计', '账面价值', '合  计', '合计'):
+        _SKIP = ('坏账', '减值', '与TB校对', '合并抵消')
+        for pat in ('账面价值合计', '账面余额合计', '账面价值', '合 计', '合  计', '合计', '小计'):
             for r in rows[hi + 1:]:
                 label = ' '.join(str(x) for x in (r[0], r[1] if len(r) > 1 else '') if x)
-                if (pat in label and len(r) > j_aud
-                        and isinstance(r[j_aud], (int, float)) and abs(r[j_aud]) > 0.005):
-                    return r[j_aud]
-        for r in reversed(rows[hi + 1:]):
-            if r and len(r) > j_aud and isinstance(r[j_aud], (int, float)) and abs(r[j_aud]) > 0.005:
-                return r[j_aud]
+                if any(sk in label for sk in _SKIP):
+                    continue
+                if (pat in label and len(r) > jv
+                        and isinstance(r[jv], (int, float)) and abs(r[jv]) > 0.005):
+                    return r[jv]
+        # 回退：第一个非零行（1年以内等账龄行）
+        for r in rows[hi + 1:]:
+            label = ' '.join(str(x) for x in (r[0], r[1] if len(r) > 1 else '') if x)
+            if any(sk in label for sk in _SKIP):
+                continue
+            if r and len(r) > jv and isinstance(r[jv], (int, float)) and abs(r[jv]) > 0.005:
+                return r[jv]
         return 0.0
 
     # ---- D 二级科目格式：最后『集团合计数』行（每主体一列，无合计列 → sum）----
@@ -176,7 +190,11 @@ def extract_note(rows):
     return 0.0
 
 
-def read_merged(fp):
+def read_merged(fp, col='merged'):
+    """读合并审定表（横展）指定列：
+    col='merged' → 『合并报表数』列（= 全集团合计 + 抵消，抵消空时 = 合计）
+    col='total'  → 『全集团合计』列（88 家简单加总，未抵消）——⚡ 2026-09-01 新增，
+                  与附注『简单加计数』同口径（汇总数核对，抵消放后面）。"""
     wb = openpyxl.load_workbook(fp, read_only=True, data_only=True)
     rows = list(wb['合并审定表（横展）'].iter_rows(values_only=True))
     hi = next((i for i, r in enumerate(rows[:4]) if r and r[0] and str(r[0]).strip() == '项目'), None)
@@ -184,7 +202,8 @@ def read_merged(fp):
         wb.close()
         return {}
     hdr = rows[hi]
-    c_m = next((j for j, h in enumerate(hdr) if h and '合并报表数' in str(h)), None)
+    key = '全集团合计' if col == 'total' else '合并报表数'
+    c_m = next((j for j, h in enumerate(hdr) if h and key in str(h)), None)
     if c_m is None:
         c_m = len(hdr) - 1
     out = {}
@@ -206,8 +225,11 @@ def read_note(fp):
     return out
 
 
-def main(src_dir, note_fp, merge_fp):
-    merged = read_merged(merge_fp)
+def main(src_dir, note_fp, merge_fp, mode='both'):
+    """mode: 'merged' 附注(已抵消审定数) vs 横展合并报表数；'total' 附注(简单加计数=未抵消)
+    vs 横展全集团合计（88家汇总核对，抵消放后面）；'both' 输出两种口径汇总行。"""
+    mcol = 'total' if mode == 'total' else 'merged'
+    merged = read_merged(merge_fp, col=mcol)
     notes = read_note(note_fp)
     ok, diff, note_only = 0, [], []
     for sn, note in notes.items():
@@ -227,7 +249,8 @@ def main(src_dir, note_fp, merge_fp):
             diff.append((sn, note, m, m_key))
         else:
             ok += 1
-    print(f'=== 附注汇总 vs 合并审定表（{src_dir}）===')
+    label = '全集团合计(88家汇总)' if mcol == 'total' else '合并报表数(含抵消)'
+    print(f'=== 附注汇总 vs 合并审定表（{src_dir}）[{label}] ===')
     print(f'一致 {ok} 个 / 差异 {len(diff)} 个 / 附注有而横展无 {len(note_only)} 个')
     print('\n[差异清单]（绝对值口径）')
     for sn, n, m, mk in sorted(diff, key=lambda x: -abs(abs(x[1]) - abs(x[2]))):
@@ -236,11 +259,26 @@ def main(src_dir, note_fp, merge_fp):
         print('\n[仅附注披露、合并审定表未列]')
         for sn, n in note_only:
             print(f'  {sn[:14]:<16} 附注={n:,.0f}')
+    if mode == 'both':
+        print()
+        # 两种口径汇总对比
+        m1 = read_merged(merge_fp, col='total')
+        m2 = read_merged(merge_fp, col='merged')
+        c1 = sum(1 for sn, n in notes.items() if n and m1.get(NOTE_TO_MERGE.get(sn, sn), 0)
+                 and abs(abs(n) - abs(m1[NOTE_TO_MERGE.get(sn, sn)])) <= 1)
+        c2 = sum(1 for sn, n in notes.items() if n and m2.get(NOTE_TO_MERGE.get(sn, sn), 0)
+                 and abs(abs(n) - abs(m2[NOTE_TO_MERGE.get(sn, sn)])) <= 1)
+        print(f'[口径对比] 未抵消口径(附注简单加计数 vs 横展全集团合计): 一致 {c1} 个；'
+              f'已抵消口径(附注审定数 vs 横展合并报表数): 一致 {c2} 个')
     return 0
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print('用法: python footnote_recon.py <底稿目录> <附注汇总xlsx> <合并工作底稿xlsx>')
+        print('用法: python footnote_recon.py <底稿目录> <附注汇总xlsx> <合并工作底稿xlsx> [--mode merged|total|both]')
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    mode = 'both'
+    if '--mode' in sys.argv:
+        i = sys.argv.index('--mode')
+        mode = sys.argv[i + 1] if i + 1 < len(sys.argv) else 'both'
+    main(sys.argv[1], sys.argv[2], sys.argv[3], mode=mode)

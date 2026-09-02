@@ -2469,7 +2469,7 @@ def _write_sap_fee_audit(wb, code, name, entities, y, tb_l2_control, data_dir=No
         支持管理/销售/研发/制造/财务等全部同类费用稿）；TB 文件未就绪/主体缺失时
         如实标注「待TB文件」，不虚构「一致」（符合审计铁律：禁止报正常）。
 
-    [BRANCH-12-TEST] 测试说明文字改动：此行为用于验证 GitHub Desktop 分支 12 能
+    [BRANCH-TEST] 测试说明文字改动：此行为用于验证 GitHub Desktop 分支 test 能
     正确提示改动。属临时测试标记，验证后应移除。"""
     tb_map = _tb_audit_lookup(tb_audit_vals, y)
 >>>>>>> Stashed changes

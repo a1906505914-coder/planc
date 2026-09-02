@@ -2457,7 +2457,22 @@ def _write_sap_fee_audit(wb, code, name, entities, y, tb_l2_control, data_dir=No
     制造费用/研发费用独立科目 → add_audit_summary_sheets 按 codes=[6602] 从 TB 精确取数必为 0。
     本期数 = GL 功能范围列拆分净额（tb_l2_control 按 (e, code, *, y) 汇总，四类统一净额，
     含制造费用内部分摊冲减；与明细表/分月/附注同源）。
+<<<<<<< Updated upstream
     财务费用（6603）TB 有独立科目，仍走 add_audit（不动）。"""
+=======
+    财务费用（6603）TB 有独立科目，仍走 add_audit（不动）。
+
+    ⚡ 2026-09-02 TB核对列：按核算主体增加
+        G TB期末审定数 / H 核对差异(审定数−TB) / I TB核对结论，
+        用于把本主体该科目的审定数与外部 TB 对应数据逐主体比对（差异阈值 0.01）。
+        TB 数据由调用方经 tb_audit_vals 注入（结构见 _tb_audit_lookup，数据源无关，
+        支持管理/销售/研发/制造/财务等全部同类费用稿）；TB 文件未就绪/主体缺失时
+        如实标注「待TB文件」，不虚构「一致」（符合审计铁律：禁止报正常）。
+
+    [BRANCH-12-TEST] 测试说明文字改动：此行为用于验证 GitHub Desktop 分支 12 能
+    正确提示改动。属临时测试标记，验证后应移除。"""
+    tb_map = _tb_audit_lookup(tb_audit_vals, y)
+>>>>>>> Stashed changes
     sn = f'{name} 审定表'
     if sn in wb.sheetnames:
         del wb[sn]

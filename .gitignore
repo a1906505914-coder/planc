@@ -19,7 +19,7 @@ __pycache__/
 _wp_fingerprint_base.jsonl
 
 # 生成产物 / 中间目录
-*.xlsx
+*.xls
 *.log
 tmp/
 run_history/
